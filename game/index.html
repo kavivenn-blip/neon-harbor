@@ -3,17 +3,101 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>Neon Harbor — an original open-world crime game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1526; font-family: 'Segoe UI', Arial, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .bar { height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); width: 220px; margin-top: 3px; }
+  .bar > div { height: 100%; }
+  #health { background: #3fae5a; width: 100%; }
+  #armor { background: #4a90d9; width: 50%; }
+  #topleft { position: absolute; top: 14px; left: 16px; font-size: 15px; }
+  #cash { font-size: 20px; font-weight: bold; color: #7dff9a; margin-top: 6px; }
+  #stars { position: absolute; top: 12px; right: 18px; font-size: 30px; letter-spacing: 2px; }
+  .star { color: rgba(255,255,255,.25); }
+  .star.on { color: #ffd700; }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 4px; font-size: 15px; max-width: 46%; text-align: center; }
+  #minimap { position: absolute; left: 16px; bottom: 16px; border: 2px solid rgba(255,255,255,.5); border-radius: 4px; background: rgba(10,16,24,.8); }
+  #weaponbox { position: absolute; right: 18px; bottom: 24px; text-align: right; font-size: 16px; }
+  #weapon { font-weight: bold; font-size: 18px; }
+  #ammo { color: #ffd700; }
+  #speed { font-size: 26px; font-weight: bold; margin-top: 4px; }
+  #radio { font-size: 13px; color: #ffd700; margin-top: 2px; }
+  #dialog { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(10,16,24,.85); border-left: 4px solid #ffd700; padding: 10px 16px; max-width: 560px; font-size: 15px; display: none; line-height: 1.45; }
+  #toast { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 7px 14px; border-radius: 4px; font-size: 14px; display: none; }
+  #crosshair { position: fixed; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; display: none; z-index: 5; }
+  #crosshair:before, #crosshair:after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair:before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair:after { left: 0; top: 6px; width: 14px; height: 2px; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, #0d1526 0%, #1a2a4a 55%, #7a3a1a 100%); color: #fff; text-align: center; z-index: 10; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #ffd700; text-shadow: 0 4px 24px rgba(0,0,0,.6); }
+  .screen h2 { font-size: 20px; font-weight: normal; color: #ffd9a0; margin: 8px 0 24px; }
+  .screen p { max-width: 560px; line-height: 1.6; color: #d8e2f0; }
+  .screen button { pointer-events: auto; font-size: 18px; padding: 12px 34px; margin: 6px; background: #c23b2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  .screen button:hover { background: #e04a38; }
+  .screen button.secondary { background: #2e5a8a; }
+  .controls { font-size: 13px; color: #b8c4d8; margin-top: 18px; line-height: 1.9; }
+  .controls b { color: #fff; }
+  #pause-screen, #end-screen { display: none; }
+  #end-title { font-size: 56px; }
+  label { font-size: 14px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+<canvas id="game" aria-label="Neon Harbor: an original open-world crime game"></canvas>
+<div id="hud">
+  <div id="topleft">
+    <div>HEALTH</div><div class="bar"><div id="health"></div></div>
+    <div style="margin-top:4px">ARMOR</div><div class="bar"><div id="armor"></div></div>
+    <div id="cash">$250</div>
+  </div>
+  <div id="stars"></div>
+  <div id="objective"></div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="weaponbox"><div id="weapon">Pistol</div><div id="ammo">12 / 60</div><div id="speed"></div><div id="radio"></div></div>
+  <div id="dialog"></div>
+  <div id="toast"></div>
+</div>
+<div id="crosshair"></div>
+<div id="start-screen" class="screen">
+  <h1>NEON HARBOR</h1>
+  <h2>An original open-world crime game</h2>
+  <p>Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega has work — if you can still drive. Steal cars, lose the cops, run eight jobs, and take the Harbor.</p>
+  <button id="start-btn">START GAME</button>
+  <button id="continue-btn" class="secondary">CONTINUE</button>
+  <div class="controls">
+    <b>WASD</b> move / drive &nbsp; <b>Shift</b> sprint &nbsp; <b>Space</b> jump / handbrake &nbsp; <b>E</b> enter car, steal, collect<br>
+    <b>F</b> punch &nbsp; <b>Click</b> shoot &nbsp; <b>1–4</b> weapons &nbsp; <b>R</b> reload &nbsp; <b>H</b> horn &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute
+  </div>
+</div>
+<div id="pause-screen" class="screen">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <p>Take a breath, Rook. The Harbor waits.</p>
+  <button id="resume-btn">RESUME</button>
+  <button id="restart-btn" class="secondary">RESTART</button>
+  <label>Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+  <div class="controls"><b>WASD</b> move &nbsp; <b>E</b> enter car &nbsp; <b>Click</b> shoot &nbsp; <b>1–4</b> weapons &nbsp; <b>P</b> resume</div>
+</div>
+<div id="end-screen" class="screen">
+  <h1 id="end-title">BUSTED</h1>
+  <p id="end-text"></p>
+  <button id="retry-btn">RETRY MISSION</button>
+  <button id="resume-btn2" class="secondary" onclick="document.getElementById('end-screen').style.display='none'">KEEP PLAYING</button>
+</div>
+<script src="./vendor/three.min.js"></script>
+<script src="./src/config.js"></script>
+<script src="./src/world.js"></script>
+<script src="./src/player.js"></script>
+<script src="./src/vehicles.js"></script>
+<script src="./src/traffic.js"></script>
+<script src="./src/police.js"></script>
+<script src="./src/combat.js"></script>
+<script src="./src/missions.js"></script>
+<script src="./src/hud.js"></script>
+<script src="./src/audio.js"></script>
+<script src="./src/ui.js"></script>
+<script src="./src/main.js"></script>
 </body>
 </html>

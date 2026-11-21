@@ -1,5 +1,8 @@
-// traffic.js — city life: traffic cars that follow the road grid and pedestrians
-// who walk the sidewalks, cross at intersections, and flee from danger.
+// traffic.js — Neon Harbor v2 city life: traffic cars that follow the road
+// grid and pedestrians who walk the sidewalks, cross at intersections, and
+// flee from danger. v2: more of both (18 cars, 36 peds), pedestrians with
+// legs + caps so they read as people, and a stageDensity helper that gathers
+// traffic + peds near a point so screenshots show a busy street.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -48,6 +51,41 @@
     });
   }
 
+  // Gather traffic + peds near a point (for screenshot staging): move the
+  // first N traffic cars onto the road ahead/behind the point and the first
+  // M peds onto the nearby sidewalk, so the frame reads busy. They keep
+  // driving/walking afterwards — the shot is taken within seconds.
+  function stageDensity(traffic, peds, x, z, heading, nCars, nPeds) {
+    var rnd = global.NH.RNG(1234);
+    var count = 0;
+    traffic.cars.forEach(function (car) {
+      if (count >= nCars) return;
+      count++;
+      var ahead = (count % 2 === 0 ? 1 : -1) * (10 + rnd() * 26);
+      var lane = (rnd() < 0.5 ? -2.6 : 2.6);
+      var cx = x + Math.sin(heading) * ahead + Math.cos(heading) * lane;
+      var cz = z + Math.cos(heading) * ahead - Math.sin(heading) * lane;
+      car.mesh.position.x = cx;
+      car.mesh.position.z = cz;
+      car.heading = heading + (count % 2 === 0 ? 0 : Math.PI);
+      car.mesh.rotation.y = car.heading;
+      car.traffic.axis = 'z';
+      car.traffic.dir = count % 2 === 0 ? 1 : -1;
+      car.traffic.speed = 5 + rnd() * 4;
+    });
+    var pc = 0;
+    peds.peds.forEach(function (p) {
+      if (pc >= nPeds) return;
+      pc++;
+      var side = pc % 2 === 0 ? 1 : -1;
+      p.x = x + Math.sin(heading) * (6 + rnd() * 22) + Math.cos(heading) * side * 8;
+      p.z = z + Math.cos(heading) * (6 + rnd() * 22) - Math.sin(heading) * side * 8;
+      p.mesh.position.x = p.x;
+      p.mesh.position.z = p.z;
+      p.fleeing = 0;
+    });
+  }
+
   function makePedestrians(scene, world) {
     var rnd = global.NH.RNG(CFG.seed + 21);
     var shirts = [0xd8d8d8, 0x4a7a9a, 0x9a4a4a, 0x4a9a5a, 0xc2a23a, 0x7a5a9a];
@@ -55,12 +93,23 @@
     for (var i = 0; i < CFG.pedestrians; i++) {
       var g = new THREE.Group();
       var shirt = new THREE.MeshLambertMaterial({ color: shirts[i % shirts.length] });
-      var body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.32), shirt);
-      body.position.y = 1.05; body.castShadow = true;
-      var head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8),
-        new THREE.MeshLambertMaterial({ color: 0xc98a5a }));
+      var skin = new THREE.MeshLambertMaterial({ color: 0xc98a5a });
+      var pants = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
+      // Torso + head + legs + arms + cap: a person, not a box on a ball.
+      var body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), shirt);
+      body.position.y = 1.08; body.castShadow = true;
+      var head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), skin);
       head.position.y = 1.62;
-      g.add(body); g.add(head);
+      var cap = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.09, 10), shirt);
+      cap.position.y = 1.78;
+      var legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.68, 0.22), pants);
+      legL.position.set(-0.14, 0.36, 0);
+      var legR = legL.clone(); legR.position.x = 0.14;
+      var armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.17), shirt);
+      armL.position.set(-0.36, 1.1, 0);
+      var armR = armL.clone(); armR.position.x = 0.36;
+      g.add(body); g.add(head); g.add(cap); g.add(legL); g.add(legR); g.add(armL); g.add(armR);
+      g.userData = { legL: legL, legR: legR, armL: armL, armR: armR };
       var p = world.randomRoadPoint();
       // Stand on the sidewalk: offset 8 units from the road line.
       var px = p.x + (rnd() < 0.5 ? 8 : -8), pz = p.z + (rnd() < 0.5 ? 8 : -8);
@@ -83,9 +132,13 @@
       }
       if (p.fleeing > 0) {
         p.fleeing -= dt;
-        var dx = p.x - threat.x, dz = p.z - threat.z;
-        var l = Math.hypot(dx, dz) || 1;
-        p.heading = Math.atan2(dx / l, dz / l);
+        // v2 fix: the threat (muzzle flash) can fade while a ped is still
+        // fleeing — keep the current heading instead of reading a null threat.
+        if (threat) {
+          var dx = p.x - threat.x, dz = p.z - threat.z;
+          var l = Math.hypot(dx, dz) || 1;
+          p.heading = Math.atan2(dx / l, dz / l);
+        }
         p.speed = 5;
       } else {
         p.speed = 1.2 + (p.phase % 1);
@@ -105,11 +158,20 @@
       p.mesh.rotation.y = p.heading;
       p.phase += dt * p.speed * 2;
       p.mesh.position.y = Math.abs(Math.sin(p.phase)) * 0.06;
+      // Walk swing (v2): legs + arms move so peds read as walking.
+      var sw = Math.sin(p.phase) * 0.5;
+      if (p.mesh.userData.legL) {
+        p.mesh.userData.legL.rotation.x = sw;
+        p.mesh.userData.legR.rotation.x = -sw;
+        p.mesh.userData.armL.rotation.x = -sw * 0.7;
+        p.mesh.userData.armR.rotation.x = sw * 0.7;
+      }
     });
   }
 
   global.NH.makeTraffic = makeTraffic;
   global.NH.updateTraffic = updateTraffic;
+  global.NH.stageDensity = stageDensity;
   global.NH.makePedestrians = makePedestrians;
   global.NH.updatePedestrians = updatePedestrians;
 })(window);

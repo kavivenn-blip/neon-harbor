@@ -1,6 +1,8 @@
-// world.js — Neon Harbor city generation: districts, roads, buildings, beach,
-// docks, park, water, bridge, and the day/night sun. Seeded, so the world is
-// identical on every run. Exposes road helpers and building colliders.
+// world.js — Neon Harbor v2 city generation: districts, roads, buildings,
+// beach, docks, park, water, bridge, palm trees, and the sunset sun.
+// Seeded, so the world is identical on every run. Exposes road helpers and
+// building colliders. v2: golden-hour sunset, a visible sun disc, and palms
+// along the beach road so the coast reads sun-soaked in screenshots.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -21,6 +23,33 @@
     var tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     return tex;
+  }
+
+  // Palm tree: leaning trunk + radial fronds. Cheap (shared geometry), and
+  // it is the single most readable "coastal sunset" prop in a screenshot.
+  function makePalm(rnd) {
+    var g = new THREE.Group();
+    var trunkMat = new THREE.MeshLambertMaterial({ color: 0x7a5a34 });
+    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.45, 6.5, 6), trunkMat);
+    trunk.position.y = 3.2;
+    trunk.rotation.z = (rnd() - 0.5) * 0.22;
+    trunk.castShadow = true;
+    g.add(trunk);
+    var frondMat = new THREE.MeshLambertMaterial({ color: 0x2f7a3a });
+    for (var i = 0; i < 6; i++) {
+      var frond = new THREE.Mesh(new THREE.ConeGeometry(0.55, 3.4, 4), frondMat);
+      var a = (i / 6) * Math.PI * 2;
+      frond.position.set(Math.cos(a) * 1.1, 6.6, Math.sin(a) * 1.1);
+      frond.rotation.z = Math.cos(a) * 1.15;
+      frond.rotation.x = -Math.sin(a) * 1.15;
+      frond.castShadow = true;
+      g.add(frond);
+    }
+    var nut = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0x6a4a2a }));
+    nut.position.y = 6.3;
+    g.add(nut);
+    return g;
   }
 
   function buildWorld(scene) {
@@ -152,6 +181,26 @@
       }
     }
 
+    // --- Palm trees along the beach road (west edge, both sides of the road) ---
+    var palmRnd = global.NH.RNG(CFG.seed + 77);
+    for (var pz = -210; pz <= 210; pz += 24) {
+      var px1 = -half - 8 + (palmRnd() - 0.5) * 4;
+      var palm1 = makePalm(palmRnd);
+      palm1.position.set(px1, 0, pz + (palmRnd() - 0.5) * 8);
+      scene.add(palm1);
+      if (palmRnd() < 0.6) {
+        var palm2 = makePalm(palmRnd);
+        palm2.position.set(-half + 8 + (palmRnd() - 0.5) * 4, 0, pz + 12 + (palmRnd() - 0.5) * 8);
+        scene.add(palm2);
+      }
+    }
+    // A few palms in the park and suburbs for variety.
+    for (var pp = 0; pp < 6; pp++) {
+      var palm3 = makePalm(palmRnd);
+      palm3.position.set(140 + (palmRnd() - 0.5) * 60, 0, -120 + (palmRnd() - 0.5) * 120);
+      scene.add(palm3);
+    }
+
     // --- Docks: containers + cranes ---
     var contCols = [0xb03a2e, 0x2e6f8e, 0x8a6d1f, 0x3a7a4a];
     for (var ci = 0; ci < 26; ci++) {
@@ -193,6 +242,18 @@
     scene.add(sun);
     var hemi = new THREE.HemisphereLight(0xbfd9ff, 0x3a2f28, 0.85);
     scene.add(hemi);
+    // Visible sun disc + warm glow (v2): a bright circle that sits low in
+    // the west at golden hour, so sunset is unmistakable in screenshots.
+    var sunDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(16, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false })
+    );
+    var sunGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(34, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.35, fog: false })
+    );
+    scene.add(sunDisc);
+    scene.add(sunGlow);
     function setTime(hours) {
       var t = ((hours % 24) + 24) % 24;
       var ang = (t / 24) * Math.PI * 2 - Math.PI / 2; // 6h sunrise, 18h sunset
@@ -200,13 +261,24 @@
       sun.position.set(Math.cos(ang) * 220, Math.max(elev, 0.3) * 220, 90);
       var day = Math.max(0, Math.min(1, elev * 2 + 0.45));
       var dusk = Math.max(0, 1 - Math.abs(elev) * 4) * (t > 12 ? 1 : 0.4);
+      // v2: stronger sunset — the sky leans harder into orange at dusk.
       var sky = new THREE.Color(P.skyDay).lerp(new THREE.Color(P.skyNight), 1 - day);
-      sky.lerp(new THREE.Color(P.skyDusk), Math.min(0.45, dusk));
+      sky.lerp(new THREE.Color(P.skyDusk), Math.min(0.65, dusk));
       scene.background = sky;
       scene.fog = new THREE.Fog(sky.getHex(), 180, 520);
       sun.intensity = 0.55 + day * 1.05;
       sun.color.setHex(dusk > 0.3 ? P.sunDusk : P.sunDay);
       hemi.intensity = 0.45 + day * 0.55;
+      // Sun disc: place it low in the west (over the water) at golden hour.
+      var sunDir = new THREE.Vector3(Math.cos(ang), Math.max(elev, 0.08), 0.45).normalize();
+      var discPos = sunDir.clone().multiplyScalar(700);
+      sunDisc.position.copy(discPos);
+      sunGlow.position.copy(discPos);
+      sunDisc.lookAt(0, 0, 0);
+      sunGlow.lookAt(0, 0, 0);
+      var discVisible = t > 15 && t < 20.5;
+      sunDisc.visible = discVisible;
+      sunGlow.visible = discVisible;
       world.timeOfDay = t;
     }
     world.setTime = setTime;

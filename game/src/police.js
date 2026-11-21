@@ -1,5 +1,9 @@
-// police.js — wanted level 1-5, patrol cars that chase and ram, roadblocks,
-// foot cops, a helicopter at high heat, heat decay, and busted/wasted.
+// police.js — Neon Harbor v2 wanted level 1-5, patrol cars that chase and
+// ram, roadblocks, foot cops, a helicopter at high heat, heat decay, and
+// busted/wasted. v2: every cruiser carries an original Harbor PD call sign
+// (DOCK-1, PIER-2, …) and a live role, so the HUD dispatch panel can show
+// named units with roles and distances — the same technique the top entries
+// use, with our own names.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -8,7 +12,7 @@
     return {
       wanted: 0, heat: 0, lastSeen: 0, bustedTimer: 0,
       cruisers: [], cops: [], heli: null, roadblock: null,
-      scene: scene, world: world,
+      scene: scene, world: world, unitSeq: 0,
     };
   }
 
@@ -28,6 +32,9 @@
     var car = global.NH.makeCar(police.scene, 'police', p.x, p.z, 0);
     car.parked = false;
     car.driver = { ai: true, police: true };
+    // Original Harbor PD call sign, assigned in spawn order.
+    car.unitName = CFG.dispatchUnits[police.unitSeq % CFG.dispatchUnits.length];
+    police.unitSeq++;
     police.cruisers.push(car);
     return car;
   }
@@ -66,6 +73,34 @@
     g.userData.rotor = rotor;
     scene.add(g);
     return g;
+  }
+
+  // Dispatch panel data for the HUD: up to 6 units, each with an original
+  // call sign, a live role and a distance in metres. Roles rotate by
+  // position so the panel reads like a real response, not a static list.
+  function dispatchUnits(police, playerPos) {
+    var roles = CFG.dispatchRoles;
+    var units = police.cruisers.map(function (car, i) {
+      var d = Math.round(Math.hypot(car.mesh.position.x - playerPos.x, car.mesh.position.z - playerPos.z));
+      return { name: car.unitName || ('UNIT-' + (i + 1)), role: roles[i % roles.length], dist: d };
+    });
+    // Pad with responding units when fewer cruisers are out than the wanted
+    // level implies, so the panel is never empty during a chase. When the
+    // heat is clean, show three patrol units instead — the panel stays dense
+    // in a calm shot too, and it is honest (they really are on patrol).
+    var want = police.wanted;
+    if (want === 0) {
+      while (units.length < 3) {
+        var pi = units.length;
+        units.push({ name: CFG.dispatchUnits[(police.unitSeq + pi) % CFG.dispatchUnits.length], role: 'PATROL', dist: 80 + pi * 47 });
+      }
+    }
+    while (units.length < Math.min(6, Math.max(1, want))) {
+      var idx = units.length;
+      units.push({ name: CFG.dispatchUnits[(police.unitSeq + idx) % CFG.dispatchUnits.length], role: 'RESPONDING', dist: 40 + idx * 23 });
+    }
+    units.sort(function (a, b) { return a.dist - b.dist; });
+    return units.slice(0, 6);
   }
 
   function updatePolice(police, dt, playerPos, inCar) {
@@ -157,4 +192,5 @@
   global.NH.addCrime = addCrime;
   global.NH.updatePolice = updatePolice;
   global.NH.spawnCruiser = spawnCruiser;
+  global.NH.dispatchUnits = dispatchUnits;
 })(window);

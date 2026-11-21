@@ -1,5 +1,7 @@
-// player.js — on-foot protagonist "Rook": walk, sprint, jump, punch, and the
-// third-person follow camera. Also owns the on-foot / in-car state switch.
+// player.js — Neon Harbor v2 on-foot protagonist "Rook": walk, sprint, jump,
+// punch, and the third-person follow camera. Also owns the on-foot / in-car
+// state switch. v2: Rook reads as a person — a cap, a jacket with a collar,
+// and legs that swing; no more plain box + ball head.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -7,19 +9,33 @@
   function makePlayerMesh() {
     var g = new THREE.Group();
     var jacket = new THREE.MeshLambertMaterial({ color: 0x2e5a8a });
+    var jacketDark = new THREE.MeshLambertMaterial({ color: 0x1e3a5a });
     var skin = new THREE.MeshLambertMaterial({ color: 0xc98a5a });
     var pants = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
-    var torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.75, 0.36), jacket);
-    torso.position.y = 1.15; torso.castShadow = true;
-    var head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), skin);
+    var capMat = new THREE.MeshLambertMaterial({ color: 0xc23b2e });
+    // Torso with a collar band so the jacket reads as clothing.
+    var torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.72, 0.36), jacket);
+    torso.position.y = 1.14; torso.castShadow = true;
+    var collar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.3), jacketDark);
+    collar.position.y = 1.52;
+    // Head + cap (brim forward) + hair at the back.
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 10), skin);
     head.position.y = 1.72; head.castShadow = true;
+    var cap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.25, 0.1, 12), capMat);
+    cap.position.y = 1.88;
+    var brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.22), capMat);
+    brim.position.set(0, 1.85, 0.26);
+    var hair = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.12),
+      new THREE.MeshLambertMaterial({ color: 0x2a1a0a }));
+    hair.position.set(0, 1.68, -0.18);
     var legL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.75, 0.24), pants);
     legL.position.set(-0.16, 0.38, 0); legL.castShadow = true;
     var legR = legL.clone(); legR.position.x = 0.16;
     var armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.65, 0.2), jacket);
     armL.position.set(-0.42, 1.2, 0); armL.castShadow = true;
     var armR = armL.clone(); armR.position.x = 0.42;
-    g.add(torso); g.add(head); g.add(legL); g.add(legR); g.add(armL); g.add(armR);
+    g.add(torso); g.add(collar); g.add(head); g.add(cap); g.add(brim); g.add(hair);
+    g.add(legL); g.add(legR); g.add(armL); g.add(armR);
     g.userData = { legL: legL, legR: legR, armL: armL, armR: armR };
     return g;
   }

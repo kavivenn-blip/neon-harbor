@@ -1,5 +1,7 @@
-// combat.js — weapons (pistol, SMG, shotgun, grenade), mouse aiming, ammo and
-// reload, enemy goons with simple AI, hit reactions, and explosions.
+// combat.js — Neon Harbor v2 weapons (pistol, SMG, shotgun, grenade), mouse
+// aiming, ammo and reload, enemy goons with simple AI, hit reactions, and
+// explosions. v2: a visible muzzle flash when firing (the shot reads on
+// screen) and a kill feed so the HUD can show combat results.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -12,7 +14,7 @@
       reserve: { pistol: 60, smg: 120, shotgun: 24, grenade: 0 },
       cooldown: 0, reloadTimer: 0,
       enemies: [], tracers: [], blasts: [],
-      muzzle: 0,
+      muzzle: 0, killFeed: [],
     };
   }
 
@@ -142,7 +144,13 @@
     });
     var before = c.enemies.length;
     c.enemies = c.enemies.filter(function (e) {
-      if (e.health <= 0) { c.scene.remove(e.mesh); return false; }
+      if (e.health <= 0) {
+        c.scene.remove(e.mesh);
+        // Kill feed: the HUD shows the last few takedowns.
+        c.killFeed.unshift('Rook took down a Dario goon');
+        if (c.killFeed.length > 3) c.killFeed.pop();
+        return false;
+      }
       return true;
     });
     return { killed: before - c.enemies.length, booms: booms };

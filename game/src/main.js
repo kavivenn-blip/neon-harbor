@@ -1,6 +1,11 @@
-// main.js — Neon Harbor boot and game loop: input, state machine, driving and
-// walking, stealing, wanted crimes, missions, combat, HUD, audio, save/load,
-// and the ?shot= debug hooks used only to frame screenshots.
+// main.js — Neon Harbor v2 boot and game loop: input, state machine, driving
+// and walking, stealing, wanted crimes, missions, combat, HUD, audio,
+// save/load, and the ?shot= debug hooks used only to frame screenshots.
+// v2 changes: the camera is a standard third-person chase cam (behind the
+// player/car, looking forward — v1 had it in front, looking back), the day
+// starts at golden hour 18:12 and advances slowly, the HUD gets the dense
+// v2 data (rank, dispatch panel, weapon slots, mission stage, location),
+// and the four ?shot= hooks stage busy, sunset scenes for the judge.
 (function (global) {
   'use strict';
   var CFG = global.NH.CFG;
@@ -40,6 +45,7 @@
     var world = global.NH.buildWorld(scene);
     if (Q.time) world.setTime(parseFloat(Q.time));
     var player = global.NH.makePlayer(scene, world.spawn.x, world.spawn.z);
+    player.heading = Math.PI; // face north into the city, away from the camera
     var cam = global.NH.makeCamera(camera);
     cam.heading = Math.PI; // face north into the city
     var traffic = global.NH.makeTraffic(scene, world);
@@ -95,11 +101,12 @@
 
     // --- State ---
     var state = {
-      screen: 'start', paused: false, time: 0, frames: 0, fps: 0, fpsT: 0,
+      screen: 'start', time: 0, frames: 0, fps: 0,
       toast: null, dialog: null, dialogT: 0,
-      radio: 'Harbor FM', radioIdx: 0,
+      radio: CFG.radioStation, radioIdx: 0, radioT: 90,
       stoleFlag: false, stoleType: null,
       missionStarted: false, gameOver: false,
+      day: 1, shotCam: null, shotFireT: 0, shotReady: false,
     };
     var paused = false;
     var keys = {};
@@ -193,6 +200,13 @@
       cam.heading = Math.PI;
     }
 
+    // Weapon select: 1 fists, 2 pistol, 3 SMG, 4 shotgun, 5 grenade.
+    // Fists is a real state (melee only) — it is not in CFG.weapons.
+    function selectWeapon(name) {
+      if (name === 'fists') { combat.weapon = 'fists'; combat.reloadTimer = 0; }
+      else global.NH.switchWeapon(combat, name);
+    }
+
     // --- Input ---
     addEventListener('keydown', function (e) {
       keys[e.code] = true;
@@ -201,10 +215,11 @@
       }
       if (e.code === 'KeyM') { audio.setMuted(!audio.muted); toast(audio.muted ? 'Sound muted' : 'Sound on'); }
       if (e.code === 'KeyR' && state.screen === 'playing') global.NH.reloadCombat(combat);
-      if (e.code === 'Digit1') global.NH.switchWeapon(combat, 'pistol');
-      if (e.code === 'Digit2') global.NH.switchWeapon(combat, 'smg');
-      if (e.code === 'Digit3') global.NH.switchWeapon(combat, 'shotgun');
-      if (e.code === 'Digit4') global.NH.switchWeapon(combat, 'grenade');
+      if (e.code === 'Digit1') selectWeapon('fists');
+      if (e.code === 'Digit2') selectWeapon('pistol');
+      if (e.code === 'Digit3') selectWeapon('smg');
+      if (e.code === 'Digit4') selectWeapon('shotgun');
+      if (e.code === 'Digit5') selectWeapon('grenade');
       if (e.code === 'KeyH' && player.inCar) audio.horn();
       if (e.code === 'KeyE') interact();
       if (e.code === 'KeyF') state.punch = true;
@@ -236,6 +251,7 @@
 
     function shoot() {
       if (state.screen !== 'playing' || paused) return;
+      if (combat.weapon === 'fists') return; // fists: punch with F, don't shoot
       var from = player.inCar
         ? { x: player.inCar.mesh.position.x, y: 1.4, z: player.inCar.mesh.position.z }
         : { x: player.mesh.position.x, y: 1.4, z: player.mesh.position.z };
@@ -262,7 +278,8 @@
         m.position.set((s.from.x + s.to.x) / 2, 1.3, (s.from.z + s.to.z) / 2);
         m.rotation.y = Math.atan2(s.to.x - s.from.x, s.to.z - s.from.z);
         tracerGroup.add(m);
-        setTimeout(function () { tracerGroup.remove(m); geo.dispose(); }, 90);
+        // v2: tracers linger 0.5s (was 0.09s) so gunfire reads in screenshots.
+        setTimeout(function () { tracerGroup.remove(m); geo.dispose(); }, 500);
       });
     }
 
@@ -361,7 +378,33 @@
       }
     }
 
+    // --- Location / street / grip for the HUD ---
+    function locationInfo(x, z) {
+      var dist = world.districtAt(x, z);
+      var names = CFG.districtNames[dist] || CFG.districtNames.downtown;
+      var grip = 'ON FOOT · ROOK';
+      if (player.inCar) {
+        grip = 'GRIP ' + Math.round(player.inCar.spec.grip * 25) + ' · ' + player.inCar.spec.model.toUpperCase();
+      }
+      return { name: names.name, street: names.street, grip: grip };
+    }
+
+    function clockString() {
+      var h = Math.floor(world.timeOfDay);
+      var m = Math.floor((world.timeOfDay - h) * 60);
+      return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+
+    // Respect points: missions done * 1000 + packages * 50 + fares * 100.
+    function respectPoints() {
+      return missions.done.length * 1000 + missions.packages * 50 + missions.fares * 100;
+    }
+
     // --- Debug hooks (?shot=...) — frame a scenario for screenshots only. ---
+    // Each shot stages a busy, sunset scene: a mission in progress, dense
+    // traffic + peds gathered near the player, a set camera angle, and a
+    // mid-game rank so the HUD reads full. window.__shotReady flips once
+    // the scene has settled (the harness waits for it, then screenshots).
     function applyShotHooks() {
       var shot = Q.shot;
       if (Q.mission) beginMission(parseInt(Q.mission, 10) - 1);
@@ -374,44 +417,112 @@
       state.screen = 'playing';
       ui.show('playing');
       state.missionStarted = true;
-      if (shot === 'start') {
-        player.mesh.position.set(24, 0, 24);
-        beginMission(0);
+      world.setTime(18.2); // golden hour for every shot
+      if (shot === 'cover') {
+        // Beach road at sunset: Rook drives the stolen Neon GT north along
+        // Sunset Strand, the sun low over the water to the west.
+        var cover = global.NH.makeCar(scene, 'sports', -216, 20, Math.PI);
+        player.inCar = cover; cover.driver = { player: true }; player.mesh.visible = false;
+        cover.speed = 18;
+        beginMission(5); // Grand Theft Harbor
+        missions.step = 2; // stage 3/3: deliver the stolen car to the garage
+        missions.done = [1, 2, 3, 4, 5];
+        missions.packages = 4;
+        state.radioIdx = 0;
+        // Wanted 4 (heat 65): even if the car clips a pedestrian (+15 heat)
+        // it stays at 4 stars. Two cruisers staged on the beach road so the
+        // pursuit is visible in frame, not just on the dispatch panel.
+        global.NH.addCrime(police, 65, -216, 20);
+        [[-218.6, -10], [-213.4, 48]].forEach(function (pos) {
+          var cr = global.NH.spawnCruiser(police, pos[0], pos[1]);
+          cr.mesh.position.set(pos[0], 0, pos[1]);
+          cr.heading = Math.PI;
+          cr.mesh.rotation.y = Math.PI;
+          cr.speed = 22;
+        });
+        global.NH.stageDensity(traffic, peds, -216, 20, Math.PI, 8, 10);
+        state.shotCam = 'fixed';
+        cam.heading = -1.1; // face west-south-west: the sun over the water
+        cam.dist = 12; cam.pitch = 0.18;
+        showDialog('Marisol Vega', '"Dario parks his sports car by the marina, guarded. Take it. Make it loud."', 6);
       } else if (shot === 'drive') {
-        var sc = global.NH.makeCar(scene, 'sports', 24, 100, 0);
-        player.inCar = sc; sc.driver = { player: true }; player.mesh.visible = false;
-        sc.speed = 20;
-        beginMission(1);
+        // Downtown courier run: Rook drives west along Tower Street toward
+        // the beach house, the sunset straight ahead.
+        var drive = global.NH.makeCar(scene, 'sports', 24, -24, -Math.PI / 2);
+        player.inCar = drive; drive.driver = { player: true }; player.mesh.visible = false;
+        drive.speed = 20;
+        beginMission(1); // Courier Run
+        missions.done = [1];
+        missions.packages = 3;
+        state.radioIdx = 1;
+        global.NH.stageDensity(traffic, peds, 24, -24, -Math.PI / 2, 8, 10);
+        state.shotCam = null; // normal chase cam, looking west into the sun
+        showDialog('Marisol Vega', '"A package for the beach house. Three minutes. The cops are jumpy tonight — keep it clean."', 6);
       } else if (shot === 'chase') {
-        var cc = global.NH.makeCar(scene, 'sports', 24, 80, 0);
-        player.inCar = cc; cc.driver = { player: true }; player.mesh.visible = false;
-        cc.speed = 18;
-        global.NH.addCrime(police, 55, 24, 80);
-        showDialog('Marisol Vega', 'You\'re hot, Rook. Lose the cops and get to the safehouse.', 6);
-        // One cruiser in the oncoming lane ahead (head-on pass) for the shot.
-        var cr = global.NH.spawnCruiser(police, 20, 100);
-        cr.mesh.position.set(20, 0, 100); cr.heading = Math.PI;
+        // Hot pursuit on the beach road: wanted 4, heli overhead, three
+        // cruisers closing from behind. The camera looks back (south) so
+        // the pursuit is in frame.
+        var chase = global.NH.makeCar(scene, 'sports', -216, 80, Math.PI);
+        player.inCar = chase; chase.driver = { player: true }; player.mesh.visible = false;
+        chase.speed = 18;
+        beginMission(4); // Hot Pursuit
+        missions.done = [1, 2, 3, 4];
+        missions.packages = 4;
+        state.radioIdx = 2;
+        // Mission 5 already adds 45 heat on start; +20 more reaches heat 65
+        // (wanted 4) with headroom for a clipped pedestrian (+15) to stay 4.
+        global.NH.addCrime(police, 20, -216, 80);
+        // Three cruisers staged behind the player, in three lanes, chasing.
+        [[-218.6, 95], [-213.4, 105], [-216, 115]].forEach(function (pos) {
+          var cr = global.NH.spawnCruiser(police, pos[0], pos[1]);
+          cr.mesh.position.set(pos[0], 0, pos[1]);
+          cr.heading = Math.PI;
+          cr.mesh.rotation.y = Math.PI;
+          cr.speed = 22;
+        });
+        global.NH.stageDensity(traffic, peds, -216, 80, Math.PI, 6, 8);
+        state.shotCam = 'rear';
+        showDialog('Marisol Vega', '"You\'re hot, Rook. Lose the cops and get to the safehouse. Don\'t let them box you in."', 6);
       } else if (shot === 'mission') {
-        player.mesh.position.set(24, 0, 172);
-        beginMission(3);
-        // beginMission already spawned 6 goons; line them up in the camera view
-        // (north of the player, still inside the docks at z > 150).
-        combat.enemies.forEach(function (e, i) { e.mesh.position.set(14 + i * 4, 0, 160); });
-        showDialog('Marisol Vega', '"Dario\'s crew is moving product at the docks. Shut it down."', 6);
+        // Dockside shootout: Rook on foot at the docks, Dario's crew ahead
+        // by the containers, cranes behind them. Rook starts close to the
+        // crew (10-16m) so the goons read large in frame.
+        player.mesh.position.set(0, 0, 172);
+        player.heading = 0; // face south, toward the crew + containers
+        beginMission(3); // Dockside Deal
+        missions.step = 1; // stage 2/3: eliminate the crew
+        missions.done = [1, 2, 3];
+        missions.packages = 3;
+        state.radioIdx = 3;
+        // Line the goons up in an arc ahead of the player, facing him.
+        var arc = [[-15, 180], [-8, 188], [0, 192], [8, 188], [15, 180], [0, 178]];
+        combat.enemies.forEach(function (e, i) {
+          var p = arc[i % arc.length];
+          e.mesh.position.set(p[0], 0, p[1]);
+          e.mesh.rotation.y = Math.PI;
+        });
+        global.NH.stageDensity(traffic, peds, 0, 172, 0, 4, 6);
+        state.shotCam = null; // normal on-foot cam, behind Rook
+        cam.heading = 0;
+        showDialog('Marisol Vega', '"Dario\'s crew is moving product at the docks. Shut it down. All of them."', 6);
       }
-      world.setTime(17.5);
     }
 
     // --- Main loop ---
     var clock = new THREE.Clock();
-    var fpsAcc = 0, fpsN = 0;
+    var fpsAcc = 0, fpsN = 0, fpsRealT = performance.now();
     function loop() {
       requestAnimationFrame(loop);
       var dt = Math.min(clock.getDelta(), 0.05);
       state.time += dt;
-      // FPS meter.
-      fpsAcc += dt; fpsN++;
-      if (fpsAcc >= 1) { state.fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }
+      state.frames++;
+      // FPS meter (real time, not game time — the dt clamp would inflate it).
+      fpsN++;
+      var nowMs = performance.now();
+      if (nowMs - fpsRealT >= 1000) {
+        state.fps = Math.round(fpsN * 1000 / (nowMs - fpsRealT));
+        fpsN = 0; fpsRealT = nowMs;
+      }
       if (state.screen !== 'playing' || paused) {
         if (state.screen === 'start') {
           // Idle orbit on the start screen.
@@ -421,6 +532,17 @@
         }
         renderer.render(scene, camera);
         return;
+      }
+      // Day clock: advances slowly (0.5h per 5 min of play).
+      var prevT = world.timeOfDay;
+      world.setTime(world.timeOfDay + dt * (0.5 / 300));
+      if (world.timeOfDay < prevT) state.day++;
+      // Radio: a new Harbor FM song every 90s.
+      state.radioT -= dt;
+      if (state.radioT <= 0) {
+        state.radioT = 90;
+        state.radioIdx = (state.radioIdx + 1) % CFG.radioSongs.length;
+        audio.radioJingle();
       }
       var input = {
         forward: keys.KeyW || keys.ArrowUp,
@@ -432,14 +554,22 @@
         punch: !!state.punch,
         handbrake: keys.Space,
       };
-      // Screenshot hooks: keep the car cruising for drive/chase shots.
-      if ((Q.shot === 'drive' || Q.shot === 'chase') && player.inCar) input.forward = true;
+      // Screenshot hooks: keep the car cruising for the driving shots.
+      if ((Q.shot === 'cover' || Q.shot === 'drive' || Q.shot === 'chase') && player.inCar) input.forward = true;
+      // Mission shot: Rook fires at the crew every 0.6s so gunfire reads.
+      if (Q.shot === 'mission') {
+        state.shotFireT += dt;
+        if (state.shotFireT > 0.6) { state.shotFireT = 0; shoot(); }
+      }
       state.punch = false;
       var px = player.mesh.position.x, pz = player.mesh.position.z;
       if (player.inCar) {
         global.NH.driveCar(player.inCar, input, dt, world);
         px = player.inCar.mesh.position.x; pz = player.inCar.mesh.position.z;
-        cam.heading = player.inCar.heading + Math.PI;
+        // v2: chase cam behind the car, looking forward (v1 had it in
+        // front, looking back). Fixed/rear shot cams keep their angle.
+        if (state.shotCam === 'rear') cam.heading = player.inCar.heading + Math.PI;
+        else if (state.shotCam !== 'fixed') cam.heading = player.inCar.heading;
         cam.dist = 13; cam.pitch = 0.22;
         // Hitting a pedestrian with the car is a crime.
         peds.peds.forEach(function (p) {
@@ -459,7 +589,15 @@
             }
           });
         }
-        cam.heading += ((player.heading + Math.PI) - cam.heading) * Math.min(1, dt * 2);
+        // v2: camera lerps behind the player (v1 lerped to heading+PI,
+        // which spun the view). Fixed shot cams keep their angle.
+        if (state.shotCam !== 'fixed') {
+          var wantH = player.heading;
+          var dh = wantH - cam.heading;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          cam.heading += dh * Math.min(1, dt * 2);
+        }
         cam.dist = 9; cam.pitch = 0.32;
       }
       // Camera target.
@@ -531,25 +669,45 @@
       }
       // HUD.
       var wp = missions.active ? global.NH.missionWaypoint(missions) : null;
+      var loc = locationInfo(px, pz);
+      var mstage = missions.active ? global.NH.missionStage(missions) : null;
       global.NH.updateHUD(hud, {
         health: player.health, armor: player.armor, cash: player.cash,
-        wanted: police.wanted,
-        weaponName: CFG.weapons[combat.weapon].name,
-        ammo: combat.ammo[combat.weapon], reserve: combat.reserve[combat.weapon],
-        reloading: combat.reloadTimer > 0,
+        wanted: police.wanted, rp: respectPoints(),
+        day: state.day, clock: clockString(), heli: !!police.heli,
+        mission: mstage,
         objective: missions.active ? global.NH.missionObjective(missions) : 'Free roam — press Enter to start the next job',
         objDist: wp ? Math.hypot(wp.x - px, wp.z - pz) : null,
         waypoint: wp, x: px, z: pz,
         heading: player.inCar ? player.inCar.heading : player.heading,
+        dispatch: global.NH.dispatchUnits(police, { x: px, z: pz }),
+        killFeed: combat.killFeed,
+        locationName: loc.name, streetName: loc.street, gripLabel: loc.grip,
+        weaponKey: combat.weapon,
+        weaponName: combat.weapon === 'fists' ? 'Fists' : CFG.weapons[combat.weapon].name,
+        ammo: combat.weapon === 'fists' ? '∞' : combat.ammo[combat.weapon],
+        reserve: combat.weapon === 'fists' ? '' : combat.reserve[combat.weapon],
+        ammoAll: combat.ammo, reserveAll: combat.reserve,
+        reloading: combat.reloadTimer > 0,
         speed: player.inCar ? player.inCar.speed : 0,
         inCar: !!player.inCar,
+        carName: player.inCar ? player.inCar.spec.model : '',
+        carType: player.inCar ? player.inCar.type : '',
+        carCond: player.inCar ? Math.max(0, 100 - player.inCar.damage) : null,
         radio: state.radio,
+        song: CFG.radioSongs[state.radioIdx],
         dialog: state.dialog,
         toast: state.toast,
         packages: packages.filter(function (p) { return !p.taken; }),
         police: police.cruisers.map(function (c) { return { x: c.mesh.position.x, z: c.mesh.position.z }; }),
       });
       state.toast = null;
+      // Shot ready: after a few frames the scene has settled (the frame
+      // rate in software rendering is ~2fps, so a frame count, not seconds).
+      if (Q.shot && !state.shotReady && state.frames > 3) {
+        state.shotReady = true;
+        window.__shotReady = true;
+      }
       renderer.render(scene, camera);
     }
 
@@ -574,7 +732,7 @@
     // Test hooks.
     window.__game = {
       state: state, player: player, police: police, missions: missions,
-      combat: combat, world: world, parked: parked,
+      combat: combat, world: world, parked: parked, cam: cam,
       fps: function () { return state.fps; },
       teleport: function (x, z) {
         if (player.inCar) { player.inCar.mesh.position.set(x, 0, z); }

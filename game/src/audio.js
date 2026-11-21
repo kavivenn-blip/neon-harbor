@@ -1,5 +1,6 @@
 // audio.js — synthesized WebAudio sound: engine hum, sirens, gunfire,
-// ambience, UI blips, and a music loop. No audio files, no network.
+// explosions, ambience, UI blips, and the Harbor FM music loop. No audio
+// files, no network — everything is generated in the browser.
 (function (global) {
   'use strict';
 
@@ -15,7 +16,7 @@
         if (!AC) return null;
         ctx = new AC();
         a.ctx = ctx;
-        // Engine: saw + lowpass, gain by speed.
+        // Engine: sawtooth through a lowpass, gain follows speed.
         a.engineOsc = ctx.createOscillator();
         a.engineOsc.type = 'sawtooth';
         a.engineOsc.frequency.value = 50;
@@ -46,6 +47,8 @@
     a.pickup = function () { blip(880, 0.12, 'sine', 0.2); blip(1320, 0.15, 'sine', 0.15); };
     a.cash = function () { blip(990, 0.1, 'sine', 0.2); blip(1480, 0.18, 'sine', 0.2); };
     a.busted = function () { blip(220, 0.5, 'sawtooth', 0.25); blip(165, 0.7, 'sawtooth', 0.25); };
+    // v2: a short Harbor FM station jingle when the radio song changes.
+    a.radioJingle = function () { blip(523, 0.09, 'sine', 0.12); blip(659, 0.09, 'sine', 0.12); blip(784, 0.16, 'sine', 0.12); };
     function noiseBurst(dur, vol, freq) {
       if (!a.started || a.muted || !ctx) return;
       var len = Math.floor(ctx.sampleRate * dur);
@@ -79,7 +82,7 @@
       a.engineGain.gain.value += (target - a.engineGain.gain.value) * 0.1;
       a.engineOsc.frequency.value = 45 + speed01 * 110;
     };
-    // Music loop: a lazy minor-key bass + pad arpeggio, one step per call.
+    // Music loop: a lazy minor-key bass line with a high pad note every bar.
     var bassNotes = [55, 55, 65.41, 49, 55, 55, 73.42, 65.41];
     a.music = function (dt) {
       if (!a.started || a.muted || !ctx) return;

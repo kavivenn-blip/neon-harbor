@@ -14,19 +14,59 @@
   #health { background: #3fae5a; width: 100%; }
   #armor { background: #4a90d9; width: 50%; }
   #topleft { position: absolute; top: 14px; left: 16px; font-size: 15px; }
-  #cash { font-size: 20px; font-weight: bold; color: #7dff9a; margin-top: 6px; }
-  #stars { position: absolute; top: 12px; right: 18px; font-size: 30px; letter-spacing: 2px; }
+  #rankbox { margin-top: 8px; }
+  #rank { font-weight: bold; color: #ffd700; letter-spacing: 1px; font-size: 14px; }
+  #rp { background: #c23b2e; width: 0%; }
+  .bar.rp { width: 220px; height: 8px; }
+  #topright { position: absolute; top: 12px; right: 18px; text-align: right; }
+  #cash { font-size: 28px; font-weight: bold; color: #7dff9a; }
+  #stars { font-size: 30px; letter-spacing: 2px; line-height: 1; }
   .star { color: rgba(255,255,255,.25); }
   .star.on { color: #ffd700; }
-  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 4px; font-size: 15px; max-width: 46%; text-align: center; }
-  #minimap { position: absolute; left: 16px; bottom: 16px; border: 2px solid rgba(255,255,255,.5); border-radius: 4px; background: rgba(10,16,24,.8); }
+  #daytime { font-size: 14px; color: #d8e2f0; margin-top: 2px; }
+  #airunit { font-size: 13px; font-weight: bold; color: #ff9a4d; margin-top: 2px; }
+  #missionhead { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 8px 16px; border-radius: 4px; max-width: 44%; text-align: left; border-top: 3px solid #ffd700; }
+  #missiontitle { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
+  #missionstage { font-size: 12px; color: #ffd700; margin-top: 3px; display: flex; align-items: center; gap: 8px; }
+  .bar.stage { width: 140px; height: 8px; display: inline-block; margin-top: 0; }
+  #stagebar { background: #ffd700; width: 0%; }
+  #missiontimer { color: #ff9a4d; font-weight: bold; }
+  #objective { font-size: 14px; margin-top: 4px; }
+  #missionnext { font-size: 12px; color: #9fd8ff; margin-top: 3px; }
+  #dispatch { position: absolute; left: 16px; top: 168px; width: 250px; background: rgba(8,12,20,.72); border: 1px solid rgba(255,255,255,.22); border-radius: 4px; padding: 8px 10px; font-size: 13px; }
+  #dispatchhead { font-weight: bold; letter-spacing: 1px; font-size: 12px; color: #ff9a4d; border-bottom: 1px solid rgba(255,255,255,.25); padding-bottom: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .drow { display: flex; justify-content: space-between; padding: 2px 0; }
+  .drow .dname { font-weight: bold; }
+  .drow .drole { color: #ff8a7a; }
+  .drow .drole.patrol { color: #9fd8ff; }
+  .drow .ddist { color: #d8e2f0; }
+  #killfeed { position: absolute; right: 18px; top: 190px; text-align: right; font-size: 12px; color: #ffd700; line-height: 1.7; }
+  #locbox { position: absolute; left: 16px; bottom: 214px; }
+  #location { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+  #street { font-size: 12px; color: #d8e2f0; }
+  #grip { font-size: 12px; color: #7dff9a; margin-top: 2px; }
+  #mapwrap { position: absolute; left: 16px; bottom: 16px; width: 180px; height: 180px; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,.55); background: rgba(10,16,24,.8); }
+  #minimap { width: 180px; height: 180px; display: block; }
+  #mapnorth { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: bold; color: #fff; }
   #weaponbox { position: absolute; right: 18px; bottom: 24px; text-align: right; font-size: 16px; }
+  #slots { display: flex; gap: 5px; justify-content: flex-end; margin-bottom: 6px; }
+  .slot { width: 52px; height: 44px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.3); border-radius: 3px; position: relative; text-align: center; }
+  .slot.on { border-color: #ffd700; background: rgba(60,45,0,.75); }
+  .slot.locked { opacity: .45; }
+  .slot .snum { position: absolute; top: 1px; left: 4px; font-size: 10px; color: #d8e2f0; }
+  .slot .sicon { height: 22px; display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+  .slot .sammo { font-size: 11px; color: #ffd700; }
   #weapon { font-weight: bold; font-size: 18px; }
   #ammo { color: #ffd700; }
-  #speed { font-size: 26px; font-weight: bold; margin-top: 4px; }
+  #speed { font-size: 30px; font-weight: bold; margin-top: 2px; }
+  #speed small { font-size: 14px; }
+  #carinfo { font-size: 13px; color: #7dff9a; }
+  #carcond { font-size: 12px; color: #d8e2f0; }
   #radio { font-size: 13px; color: #ffd700; margin-top: 2px; }
-  #dialog { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(10,16,24,.85); border-left: 4px solid #ffd700; padding: 10px 16px; max-width: 560px; font-size: 15px; display: none; line-height: 1.45; }
-  #toast { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 7px 14px; border-radius: 4px; font-size: 14px; display: none; }
+  #dialog { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(10,16,24,.88); border-left: 4px solid #ffd700; padding: 10px 16px; max-width: 600px; font-size: 15px; display: none; line-height: 1.45; }
+  #dialog .dinner { display: flex; gap: 12px; align-items: flex-start; }
+  #portrait { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 4px; overflow: hidden; }
+  #toast { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 7px 14px; border-radius: 4px; font-size: 14px; display: none; }
   #crosshair { position: fixed; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; display: none; z-index: 5; }
   #crosshair:before, #crosshair:after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
   #crosshair:before { left: 6px; top: 0; width: 2px; height: 14px; }
@@ -51,25 +91,51 @@
   <div id="topleft">
     <div>HEALTH</div><div class="bar"><div id="health"></div></div>
     <div style="margin-top:4px">ARMOR</div><div class="bar"><div id="armor"></div></div>
-    <div id="cash">$250</div>
+    <div id="rankbox"><span id="rank">GREENHORN</span><div class="bar rp"><div id="rp"></div></div></div>
   </div>
-  <div id="stars"></div>
-  <div id="objective"></div>
-  <canvas id="minimap" width="180" height="180"></canvas>
-  <div id="weaponbox"><div id="weapon">Pistol</div><div id="ammo">12 / 60</div><div id="speed"></div><div id="radio"></div></div>
-  <div id="dialog"></div>
+  <div id="topright">
+    <div id="stars"></div>
+    <div id="cash">$250</div>
+    <div id="daytime">DAY 1 · 18:12</div>
+    <div id="airunit"></div>
+  </div>
+  <div id="missionhead">
+    <div id="missiontitle">MISSION 1 · FIRST WHEELS</div>
+    <div id="missionstage"><span id="stagelabel">STAGE 1/3</span><div class="bar stage"><div id="stagebar"></div></div><span id="missiontimer"></span></div>
+    <div id="objective"></div>
+    <div id="missionnext"></div>
+  </div>
+  <div id="dispatch">
+    <div id="dispatchhead"><span>HARBOR PD</span><span id="dispatchcount">0 UNITS</span></div>
+    <div id="dispatchlist"></div>
+  </div>
+  <div id="killfeed"></div>
+  <div id="locbox">
+    <div id="location">Sunset Strand</div>
+    <div id="street">Marina Drive</div>
+    <div id="grip">NEUTRAL · 58</div>
+  </div>
+  <div id="mapwrap"><canvas id="minimap" width="180" height="180"></canvas><div id="mapnorth">N</div></div>
+  <div id="weaponbox">
+    <div id="slots"></div>
+    <div id="weapon">Pistol</div><div id="ammo">12 / 60</div>
+    <div id="speed"></div>
+    <div id="carinfo"></div><div id="carcond"></div>
+    <div id="radio"></div>
+  </div>
+  <div id="dialog"><div class="dinner"><div id="portrait"></div><div id="dialogtext"></div></div></div>
   <div id="toast"></div>
 </div>
 <div id="crosshair"></div>
 <div id="start-screen" class="screen">
   <h1>NEON HARBOR</h1>
   <h2>An original open-world crime game</h2>
-  <p>Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega has work — if you can still drive. Steal cars, lose the cops, run eight jobs, and take the Harbor.</p>
+  <p>Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega has work — if you can still drive. Steal cars, dodge the Harbor PD, climb the wanted ladder from 1 to 5 stars, run eight jobs, and take the Harbor from Dario Kaine's crew.</p>
   <button id="start-btn">START GAME</button>
   <button id="continue-btn" class="secondary">CONTINUE</button>
   <div class="controls">
     <b>WASD</b> move / drive &nbsp; <b>Shift</b> sprint &nbsp; <b>Space</b> jump / handbrake &nbsp; <b>E</b> enter car, steal, collect<br>
-    <b>F</b> punch &nbsp; <b>Click</b> shoot &nbsp; <b>1–4</b> weapons &nbsp; <b>R</b> reload &nbsp; <b>H</b> horn &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute
+    <b>F</b> punch &nbsp; <b>Click</b> shoot &nbsp; <b>1–5</b> weapons &nbsp; <b>R</b> reload &nbsp; <b>H</b> horn &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute
   </div>
 </div>
 <div id="pause-screen" class="screen">

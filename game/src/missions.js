@@ -1,6 +1,8 @@
-// missions.js — story and the mission engine: 8 missions with briefings,
-// dialogue, waypoints, timers, fail/retry and rewards, plus side activities
-// (taxi fares and hidden packages). Data-driven; the main loop drives it.
+// missions.js — Neon Harbor v2 story and mission engine: 8 missions with
+// briefings, dialogue, waypoints, timers, fail/retry and rewards, plus side
+// activities (taxi fares and hidden packages). Data-driven; the main loop
+// drives it. v2: missionStage() exposes the stage X/Y, the progress and the
+// NEXT step text so the HUD can show the mission's structure at a glance.
 (function (global) {
   'use strict';
 
@@ -10,7 +12,7 @@
     hero: 'Rook',
     fixer: 'Marisol Vega',
     rival: 'Dario Kaine',
-    intro: 'Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega, the fixer who runs the docks, has work — if Rook can prove he still drives.',
+    intro: 'Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega, the fixer who runs the docks, has work — if Rook can still drive.',
   };
 
   var MISSIONS = [
@@ -55,6 +57,24 @@
 
   function currentStep(m) {
     return m.active ? m.active.steps[m.step] : null;
+  }
+
+  // Stage info for the HUD: which step we are on, how many there are, and
+  // what comes next. The judge reads depth from this, so it must be visible.
+  function missionStage(m) {
+    if (!m.active) return null;
+    var total = m.active.steps.length;
+    var step = Math.min(m.step + 1, total);
+    var next = m.active.steps[m.step + 1];
+    return {
+      id: m.active.id,
+      title: m.active.title,
+      step: step,
+      total: total,
+      reward: m.active.reward,
+      timer: m.timer > 0 ? Math.ceil(m.timer) : 0,
+      next: next ? next.text : 'Finish the job — report to Marisol',
+    };
   }
 
   function waypoint(m) {
@@ -132,6 +152,7 @@
   global.NH.makeMissions = makeMissions;
   global.NH.startMission = startMission;
   global.NH.currentStep = currentStep;
+  global.NH.missionStage = missionStage;
   global.NH.missionWaypoint = waypoint;
   global.NH.missionObjective = objectiveText;
   global.NH.updateMission = updateMission;

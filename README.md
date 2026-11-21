@@ -10,16 +10,16 @@ Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega, the fixe
 
 ## What's in the game
 
-- **A living city** — downtown towers, beach, docks, suburbs and a park, generated from a seed so the world is identical every run, with a full day/night cycle.
-- **On foot and by car** — walk, sprint, jump and punch; drive sedans, sports cars, trucks and taxis with real acceleration, steering and handbrake drift.
+- **A living city at golden hour** — downtown towers, beach, docks, suburbs and a park, generated from a seed so the world is identical every run, with a sunset sun disc over the water, palm trees along the beach road, and a slow day/night cycle.
+- **On foot and by car** — walk, sprint, jump and punch; drive sedans, sports cars, trucks and taxis with real acceleration, steering and handbrake drift. Cars read as cars now: visible wheels with hubcaps, headlights and taillights, sloped windshields, a spoiler on the sports car.
 - **Steal cars** — parked cars and traffic cars (the driver runs off, and the cops notice).
-- **Traffic and pedestrians** — cars follow the road grid, pedestrians walk the sidewalks and flee from gunfire and speeding cars.
+- **Traffic and pedestrians** — 18 cars follow the road grid, 36 pedestrians walk the sidewalks and flee from gunfire and speeding cars.
 - **Wanted 1–5 stars and police** — patrol cruisers chase and ram, foot cops move in to bust you, a helicopter circles at 4+ stars, and heat decays when you slip out of sight.
-- **Combat** — pistol, SMG, shotgun and grenades with mouse aim, ammo and reloads, and enemy goons with simple AI.
+- **Combat** — fists, pistol, SMG, shotgun and grenades with mouse aim, ammo and reloads, enemy goons with simple AI, and a kill feed.
 - **8 story missions** — steal, deliver, taxi fares, shootout, escape, heist and a street race, plus taxi side work and 20 hidden packages.
-- **HUD and minimap** — health, armor, cash, wanted stars, weapon/ammo, mission objective with distance, speedometer, radio, and a live minimap with roads, markers and police.
+- **A dense HUD** — health, armor, cash, wanted stars, rank and respect points, day and time, mission title with stage X/Y, progress bar, objective with distance and a NEXT step, a Harbor PD dispatch panel (named units, roles, distances), five weapon slots with icons and ammo, speedometer, car name and condition, radio station and song, district/street/grip readout, and a circular live minimap with roads, waypoint, packages and police.
 - **Menus and save** — start screen, pause, controls help, volume, and save/load in localStorage with a Continue button.
-- **Sound** — synthesized WebAudio: engines, sirens, gunfire, ambience, UI and a music loop. No audio files.
+- **Sound** — synthesized WebAudio: engines, sirens, gunfire, ambience, UI and a Harbor FM music loop. No audio files.
 
 ## Play
 
@@ -35,7 +35,7 @@ No network requests of any kind: every script, image and sound is a file under `
 
 ## Controls
 
-WASD move / drive · Shift sprint · Space jump / handbrake · E enter car, steal, collect · F punch · Click shoot · 1–4 weapons · R reload · H horn · P pause · M mute · Enter start next job
+WASD move / drive · Shift sprint · Space jump / handbrake · E enter car, steal, collect · F punch · Click shoot · 1–5 weapons · R reload · H horn · P pause · M mute · Enter start next job
 
 ## License
 

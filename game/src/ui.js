@@ -1,6 +1,6 @@
-// ui.js — screens and persistence: start screen, pause menu, controls help,
-// settings (volume), save/load in localStorage with a Continue button, and
-// busted / wasted / ending screens.
+// ui.js — screens and persistence: the start screen, pause menu, controls
+// help, a volume setting, save/load in localStorage (with a Continue
+// button), and the busted / wasted / mission-failed / ending screens.
 (function (global) {
   'use strict';
   var SAVE_KEY = 'neonharbor-save-v1';
@@ -63,9 +63,18 @@
       }
       var endTitle = document.getElementById('end-title');
       var endText = document.getElementById('end-text');
-      if (name === 'busted' && endTitle) { endTitle.textContent = 'BUSTED'; if (endText) endText.textContent = 'The Harbor PD took you in. You lost $200 bail and woke up at the safehouse.'; }
-      if (name === 'wasted' && endTitle) { endTitle.textContent = 'WASTED'; if (endText) endText.textContent = 'You got taken out. Marisol patched you up — minus $200 in hospital bills.'; }
-      if (name === 'ending' && endTitle) { endTitle.textContent = 'NEON HARBOR — COMPLETE'; if (endText) endText.textContent = 'All eight jobs done. Dario is finished, and the Harbor is yours, Rook.'; }
+      if (name === 'busted' && endTitle) {
+        endTitle.textContent = 'BUSTED';
+        if (endText) endText.textContent = 'The Harbor PD took you in. You lost $200 bail and woke up at the safehouse.';
+      }
+      if (name === 'wasted' && endTitle) {
+        endTitle.textContent = 'WASTED';
+        if (endText) endText.textContent = 'You got taken out. Marisol patched you up — minus $200 in hospital bills.';
+      }
+      if (name === 'ending' && endTitle) {
+        endTitle.textContent = 'NEON HARBOR — COMPLETE';
+        if (endText) endText.textContent = 'All eight jobs done. Dario is finished, and the Harbor is yours, Rook.';
+      }
       var hud = document.getElementById('hud');
       if (hud) hud.style.display = name === 'playing' ? 'block' : 'none';
     };

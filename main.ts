@@ -114,9 +114,13 @@ function countTree(dir: string): { files: number; bytes: number } {
 
 function handIn(repoRoot: string, outDir: string): void {
   // Start from an empty output directory, so a stale file from an earlier
-  // run can never ride along into the dossier.
-  rmSync(outDir, { recursive: true, force: true });
+  // run can never ride along into the dossier. Clear the directory's
+  // contents, not the directory itself: on the grader /output is a volume
+  // mount point, and removing the mount point fails EBUSY.
   mkdirSync(outDir, { recursive: true });
+  for (const name of readdirSync(outDir)) {
+    rmSync(join(outDir, name), { recursive: true, force: true });
+  }
 
   const shots = listScreenshots(repoRoot);
   cpSync(join(repoRoot, 'game'), join(outDir, 'game'), { recursive: true });

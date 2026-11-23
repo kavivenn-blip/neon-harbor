@@ -1,177 +1,515 @@
-// traffic.js — Neon Harbor v2 city life: traffic cars that follow the road
-// grid and pedestrians who walk the sidewalks, cross at intersections, and
-// flee from danger. v2: more of both (18 cars, 36 peds), pedestrians with
-// legs + caps so they read as people, and a stageDensity helper that gathers
-// traffic + peds near a point so screenshots show a busy street.
-(function (global) {
+// traffic.js — Neon Harbor: lalu lintas, pejalan kaki, mobil parkir.
+// Satu job: mengisi jalanan dengan mobil bergerak + trotoar dengan pejalan
+// kaki, menggerakkan semuanya tiap frame, dan men-stage mereka ke dalam
+// frame kamera saat screenshot (stageDensity / packFrame) supaya dunia
+// terlihat hidup, bukan hanya di minimap.
+// Gaya: classic script + IIFE, var/function, menempel ke window.Harbor.
+(function () {
   'use strict';
-  var CFG = global.NH.CFG;
 
-  function makeTraffic(scene, world) {
-    var rnd = global.NH.RNG(CFG.seed + 7);
-    var types = ['sedan', 'sedan', 'taxi', 'truck', 'sports'];
-    var cars = [];
-    for (var i = 0; i < CFG.trafficCars; i++) {
-      var p = world.randomRoadPoint();
-      var axis = Math.abs(p.x) > Math.abs(p.z) ? 'z' : 'x';
-      var dir = rnd() < 0.5 ? 1 : -1;
-      var type = types[Math.floor(rnd() * types.length)];
-      var car = global.NH.makeCar(scene, type, p.x, p.z, axis === 'x' ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (dir > 0 ? 0 : Math.PI));
+  var H = window.Harbor || (window.Harbor = {});
+  var THREE = window.THREE;
+
+  function pick(path, fallback) {
+    var cur = H.Config;
+    var parts = path.split('.');
+    var i;
+    if (!cur) { return fallback; }
+    for (i = 0; i < parts.length; i++) {
+      cur = cur[parts[i]];
+      if (cur === undefined || cur === null) { return fallback; }
+    }
+    return cur;
+  }
+
+  var ROAD_LINES = [-160, -80, 0, 80, 160];
+  var HALF = pick('CITY.halfExtent', 200);
+  var WRAP = HALF + 6; // titik wrap mobil traffic di ujung jalan
+  var TRAFFIC_MODELS = ['anchor', 'neon', 'hauler', 'cab'];
+
+  // Jam internal modul (akumulasi dt) — dipakai untuk membandingkan
+  // muzzleUntil tanpa Date.now() dan tanpa asumsi jam milik main.js.
+  var _clock = 0;
+  var _seenMuzzle = null;
+  var _shotAtLocal = -100;
+
+  function rngOf(S) {
+    return (S && S.rng) || Math.random;
+  }
+
+  function clamp(v, lo, hi) {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+  }
+
+  function dist2D(ax, az, bx, bz) {
+    var dx = ax - bx;
+    var dz = az - bz;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
+
+  // Posisi anchor boleh Vector3 atau array [x, y, z].
+  function anchorXZ(anchor) {
+    if (!anchor) { return { x: 0, z: 0 }; }
+    if (typeof anchor.x === 'number' && typeof anchor.z === 'number') {
+      return { x: anchor.x, z: anchor.z };
+    }
+    if (anchor.length >= 3) {
+      return { x: anchor[0], z: anchor[2] };
+    }
+    return { x: 0, z: 0 };
+  }
+
+  function anchorHeading(anchor) {
+    if (anchor && typeof anchor.heading === 'number') { return anchor.heading; }
+    return null;
+  }
+
+  function nearestLine(v) {
+    var best = ROAD_LINES[0];
+    var bd = Math.abs(v - best);
+    var i, d;
+    for (i = 1; i < ROAD_LINES.length; i++) {
+      d = Math.abs(v - ROAD_LINES[i]);
+      if (d < bd) { bd = d; best = ROAD_LINES[i]; }
+    }
+    return best;
+  }
+
+  // Pilih satu ruas jalan acak: sumbu + garis + lajur.
+  function randomRoadSpot(S) {
+    var rng = rngOf(S);
+    var axis = rng() < 0.5 ? 'x' : 'z';
+    var line = ROAD_LINES[Math.floor(rng() * ROAD_LINES.length)];
+    var lane = (rng() < 0.5 ? -1 : 1) * 4; // offset lajur dari garis tengah
+    var along = -190 + rng() * 380;
+    var heading;
+    if (axis === 'x') {
+      heading = rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+      return { axis: axis, line: line, lane: lane, x: along, z: line + lane, heading: heading };
+    }
+    heading = rng() < 0.5 ? 0 : Math.PI;
+    return { axis: axis, line: line, lane: lane, x: line + lane, z: along, heading: heading };
+  }
+
+  function placeCarOnRoad(car, spot) {
+    car.road = spot.axis;
+    car.heading = spot.heading;
+    car.pos.set(spot.x, 0, spot.z);
+    car.mesh.rotation.y = spot.heading;
+  }
+
+  // ------------------------------------------------------------------
+  // spawnTraffic(S, n): isi S.cars dengan n mobil di jalan.
+  // ------------------------------------------------------------------
+  function spawnTraffic(S, n) {
+    var rng = rngOf(S);
+    var i, key, spot, car;
+    if (!S.cars) { S.cars = []; }
+    for (i = 0; i < n; i++) {
+      key = TRAFFIC_MODELS[Math.floor(rng() * TRAFFIC_MODELS.length)];
+      spot = randomRoadSpot(S);
+      car = H.Vehicles.buildCar(S, key, spot.x, spot.z, spot.heading);
+      placeCarOnRoad(car, spot);
+      car.speed = 8 + rng() * 6; // 8..14 m/s
       car.parked = false;
-      car.driver = { ai: true };
-      car.traffic = { axis: axis, dir: dir, speed: 7 + rnd() * 5 };
-      cars.push(car);
+      if (S.scene) { S.scene.add(car.mesh); }
+      S.cars.push(car);
     }
-    return { cars: cars, rnd: rnd };
+    return S.cars;
   }
 
-  function updateTraffic(t, dt, world, danger) {
-    var lines = world.roadLines;
-    t.cars.forEach(function (car) {
-      var tr = car.traffic;
-      var sp = tr.speed;
-      // Slow near the player / danger.
-      if (danger && Math.hypot(car.mesh.position.x - danger.x, car.mesh.position.z - danger.z) < 14) sp *= 0.35;
-      var nx = car.mesh.position.x, nz = car.mesh.position.z;
-      if (tr.axis === 'x') nx += tr.dir * sp * dt; else nz += tr.dir * sp * dt;
-      // At an intersection, sometimes turn onto the cross road.
-      var onLine = lines.some(function (l) { return Math.abs((tr.axis === 'x' ? nx : nz) - l) < 1.2; });
-      if (onLine && t.rnd() < dt * 0.5) {
-        tr.axis = tr.axis === 'x' ? 'z' : 'x';
-        tr.dir = t.rnd() < 0.5 ? 1 : -1;
-        car.heading = tr.axis === 'x' ? (tr.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (tr.dir > 0 ? 0 : Math.PI);
-        car.mesh.rotation.y = car.heading;
-      }
-      // Wrap around the city edge.
-      if (nx > 215) nx = -215; if (nx < -215) nx = 215;
-      if (nz > 215) nz = -215; if (nz < -215) nz = 215;
-      car.mesh.position.x = nx;
-      car.mesh.position.z = nz;
-      car.speed = sp;
-    });
-  }
+  // ------------------------------------------------------------------
+  // Figur pejalan kaki sederhana: torso warna baju acak, kepala, kaki,
+  // lengan; sebagian bertopi. Variasi warna supaya tidak terlihat klon.
+  // ------------------------------------------------------------------
+  var SHIRT_COLORS = [0xe8e8e8, 0x3a6ea5, 0xc23b2e, 0x2a7a3a, 0xe8b400, 0x8a3a5a, 0x5a4a8a, 0x2a2a2a, 0xd87a1e, 0x7a5a3a];
+  var SKIN_COLORS = [0xd9a077, 0xc98a5e, 0x8a5a3a, 0xe8b88a, 0x6a4530];
+  var PANTS_COLORS = [0x2a2a3a, 0x3a3a2a, 0x1a1a1a, 0x4a3a2a, 0x5a5a5a];
 
-  // Gather traffic + peds near a point (for screenshot staging): move the
-  // first N traffic cars onto the road ahead/behind the point and the first
-  // M peds onto the nearby sidewalk, so the frame reads busy. They keep
-  // driving/walking afterwards — the shot is taken within seconds.
-  function stageDensity(traffic, peds, x, z, heading, nCars, nPeds) {
-    var rnd = global.NH.RNG(1234);
-    var count = 0;
-    traffic.cars.forEach(function (car) {
-      if (count >= nCars) return;
-      count++;
-      var ahead = (count % 2 === 0 ? 1 : -1) * (10 + rnd() * 26);
-      var lane = (rnd() < 0.5 ? -2.6 : 2.6);
-      var cx = x + Math.sin(heading) * ahead + Math.cos(heading) * lane;
-      var cz = z + Math.cos(heading) * ahead - Math.sin(heading) * lane;
-      car.mesh.position.x = cx;
-      car.mesh.position.z = cz;
-      car.heading = heading + (count % 2 === 0 ? 0 : Math.PI);
-      car.mesh.rotation.y = car.heading;
-      car.traffic.axis = 'z';
-      car.traffic.dir = count % 2 === 0 ? 1 : -1;
-      car.traffic.speed = 5 + rnd() * 4;
-    });
-    var pc = 0;
-    peds.peds.forEach(function (p) {
-      if (pc >= nPeds) return;
-      pc++;
-      var side = pc % 2 === 0 ? 1 : -1;
-      p.x = x + Math.sin(heading) * (6 + rnd() * 22) + Math.cos(heading) * side * 8;
-      p.z = z + Math.cos(heading) * (6 + rnd() * 22) - Math.sin(heading) * side * 8;
-      p.mesh.position.x = p.x;
-      p.mesh.position.z = p.z;
-      p.fleeing = 0;
-    });
-  }
+  function buildPedMesh(S, rng) {
+    var g = new THREE.Group();
+    var shirt = SHIRT_COLORS[Math.floor(rng() * SHIRT_COLORS.length)];
+    var skin = SKIN_COLORS[Math.floor(rng() * SKIN_COLORS.length)];
+    var pants = PANTS_COLORS[Math.floor(rng() * PANTS_COLORS.length)];
+    var shirtMat = new THREE.MeshLambertMaterial({ color: shirt });
+    var skinMat = new THREE.MeshLambertMaterial({ color: skin });
+    var pantsMat = new THREE.MeshLambertMaterial({ color: pants });
 
-  function makePedestrians(scene, world) {
-    var rnd = global.NH.RNG(CFG.seed + 21);
-    var shirts = [0xd8d8d8, 0x4a7a9a, 0x9a4a4a, 0x4a9a5a, 0xc2a23a, 0x7a5a9a];
-    var peds = [];
-    for (var i = 0; i < CFG.pedestrians; i++) {
-      var g = new THREE.Group();
-      var shirt = new THREE.MeshLambertMaterial({ color: shirts[i % shirts.length] });
-      var skin = new THREE.MeshLambertMaterial({ color: 0xc98a5a });
-      var pants = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
-      // Torso + head + legs + arms + cap: a person, not a box on a ball.
-      var body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), shirt);
-      body.position.y = 1.08; body.castShadow = true;
-      var head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), skin);
-      head.position.y = 1.62;
-      var cap = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.09, 10), shirt);
-      cap.position.y = 1.78;
-      var legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.68, 0.22), pants);
-      legL.position.set(-0.14, 0.36, 0);
-      var legR = legL.clone(); legR.position.x = 0.14;
-      var armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.17), shirt);
-      armL.position.set(-0.36, 1.1, 0);
-      var armR = armL.clone(); armR.position.x = 0.36;
-      g.add(body); g.add(head); g.add(cap); g.add(legL); g.add(legR); g.add(armL); g.add(armR);
-      g.userData = { legL: legL, legR: legR, armL: armL, armR: armR };
-      var p = world.randomRoadPoint();
-      // Stand on the sidewalk: offset 8 units from the road line.
-      var px = p.x + (rnd() < 0.5 ? 8 : -8), pz = p.z + (rnd() < 0.5 ? 8 : -8);
-      g.position.set(px, 0, pz);
-      scene.add(g);
-      peds.push({
-        mesh: g, x: px, z: pz, heading: rnd() * Math.PI * 2,
-        speed: 1.2 + rnd() * 1.2, target: null, fleeing: 0, phase: rnd() * 6,
+    function bx(w, h, d, mat, x, y, z) {
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      g.add(m);
+      return m;
+    }
+
+    var legL = bx(0.14, 0.72, 0.16, pantsMat, -0.11, 0.36, 0);
+    var legR = bx(0.14, 0.72, 0.16, pantsMat, 0.11, 0.36, 0);
+    var torso = bx(0.46, 0.62, 0.26, shirtMat, 0, 1.03, 0);
+    var armL = bx(0.12, 0.58, 0.14, shirtMat, -0.3, 1.02, 0);
+    var armR = bx(0.12, 0.58, 0.14, shirtMat, 0.3, 1.02, 0);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), skinMat);
+    head.position.set(0, 1.52, 0);
+    head.castShadow = true;
+    g.add(head);
+    // Topi untuk ~40% pejalan kaki.
+    if (rng() < 0.4) {
+      var hatMat = new THREE.MeshLambertMaterial({
+        color: [0xc23b2e, 0x2a5a8a, 0xe8b400, 0x2a2a2a][Math.floor(rng() * 4)]
       });
+      var hat = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.23, 0.09, 10), hatMat);
+      hat.position.set(0, 1.68, 0);
+      g.add(hat);
     }
-    return { peds: peds, rnd: rnd };
+    // Tas selempang untuk sebagian pejalan kaki — detail kecil pembeda.
+    if (rng() < 0.3) {
+      bx(0.1, 0.3, 0.06, new THREE.MeshLambertMaterial({ color: 0x3a2a1a }), 0.24, 1.0, 0.12);
+    }
+    g.userData.limbs = { legL: legL, legR: legR, armL: armL, armR: armR };
+    return g;
   }
 
-  function updatePedestrians(pd, dt, world, threat) {
-    pd.peds.forEach(function (p) {
-      var flee = 0;
-      if (threat) {
-        var d = Math.hypot(p.x - threat.x, p.z - threat.z);
-        if (d < (threat.radius || 18)) { flee = 1; p.fleeing = 1.2; }
-      }
-      if (p.fleeing > 0) {
-        p.fleeing -= dt;
-        // v2 fix: the threat (muzzle flash) can fade while a ped is still
-        // fleeing — keep the current heading instead of reading a null threat.
-        if (threat) {
-          var dx = p.x - threat.x, dz = p.z - threat.z;
-          var l = Math.hypot(dx, dz) || 1;
-          p.heading = Math.atan2(dx / l, dz / l);
-        }
-        p.speed = 5;
+  // ------------------------------------------------------------------
+  // spawnPeds(S, n): isi S.peds dengan pejalan kaki di trotoar.
+  // ------------------------------------------------------------------
+  function spawnPeds(S, n) {
+    var rng = rngOf(S);
+    var i, spot, mesh, ped;
+    if (!S.peds) { S.peds = []; }
+    for (i = 0; i < n; i++) {
+      spot = randomRoadSpot(S);
+      mesh = buildPedMesh(S, rng);
+      // Trotoar: 10..12 m dari garis tengah jalan.
+      var side = rng() < 0.5 ? -1 : 1;
+      var off = 10 + rng() * 2;
+      var px, pz;
+      if (spot.axis === 'x') {
+        px = spot.x;
+        pz = spot.line + side * off;
       } else {
-        p.speed = 1.2 + (p.phase % 1);
-        if (!p.target || Math.hypot(p.x - p.target.x, p.z - p.target.z) < 2) {
-          var t = world.randomRoadPoint();
-          p.target = { x: t.x + 8, z: t.z + 8 };
-        }
-        p.heading = Math.atan2(p.target.x - p.x, p.target.z - p.z);
+        px = spot.line + side * off;
+        pz = spot.z;
       }
-      var nx = p.x + Math.sin(p.heading) * p.speed * dt;
-      var nz = p.z + Math.cos(p.heading) * p.speed * dt;
-      if (!world.collides(nx, nz, 0.4)) { p.x = nx; p.z = nz; }
-      p.x = Math.max(-215, Math.min(215, p.x));
-      p.z = Math.max(-215, Math.min(215, p.z));
-      p.mesh.position.x = p.x;
-      p.mesh.position.z = p.z;
-      p.mesh.rotation.y = p.heading;
-      p.phase += dt * p.speed * 2;
-      p.mesh.position.y = Math.abs(Math.sin(p.phase)) * 0.06;
-      // Walk swing (v2): legs + arms move so peds read as walking.
-      var sw = Math.sin(p.phase) * 0.5;
-      if (p.mesh.userData.legL) {
-        p.mesh.userData.legL.rotation.x = sw;
-        p.mesh.userData.legR.rotation.x = -sw;
-        p.mesh.userData.armL.rotation.x = -sw * 0.7;
-        p.mesh.userData.armR.rotation.x = sw * 0.7;
-      }
-    });
+      mesh.position.set(px, 0, pz);
+      mesh.rotation.y = spot.heading + (rng() < 0.5 ? 0 : Math.PI);
+      if (S.scene) { S.scene.add(mesh); }
+      ped = {
+        mesh: mesh,
+        pos: mesh.position,
+        heading: mesh.rotation.y,
+        speed: 1 + rng() * 1, // 1..2 m/s
+        state: 'walk',
+        fleeT: 0,
+        phase: rng() * Math.PI * 2
+      };
+      S.peds.push(ped);
+    }
+    return S.peds;
   }
 
-  global.NH.makeTraffic = makeTraffic;
-  global.NH.updateTraffic = updateTraffic;
-  global.NH.stageDensity = stageDensity;
-  global.NH.makePedestrians = makePedestrians;
-  global.NH.updatePedestrians = updatePedestrians;
-})(window);
+  // ------------------------------------------------------------------
+  // spawnParked(S, n): isi S.parkedCars dengan mobil parkir di tepi jalan.
+  // ------------------------------------------------------------------
+  function spawnParked(S, n) {
+    var rng = rngOf(S);
+    var i, key, spot, car;
+    if (!S.parkedCars) { S.parkedCars = []; }
+    for (i = 0; i < n; i++) {
+      key = TRAFFIC_MODELS[Math.floor(rng() * TRAFFIC_MODELS.length)];
+      spot = randomRoadSpot(S);
+      // Tepi jalan: offset lajur + 6 m ke arah luar.
+      var side = spot.lane >= 0 ? 1 : -1;
+      var edge = spot.line + side * (4 + 6);
+      var px = spot.axis === 'x' ? spot.x : edge;
+      var pz = spot.axis === 'x' ? edge : spot.z;
+      car = H.Vehicles.buildCar(S, key, px, pz, spot.heading);
+      car.road = spot.axis;
+      car.speed = 0;
+      car.parked = true;
+      if (S.scene) { S.scene.add(car.mesh); }
+      S.parkedCars.push(car);
+    }
+    return S.parkedCars;
+  }
+
+  // ------------------------------------------------------------------
+  // tickTraffic(dt, S): gerakkan mobil + pejalan kaki tiap frame.
+  // ------------------------------------------------------------------
+  function tickTraffic(dt, S) {
+    if (!S) { return; }
+    _clock += dt;
+    var now = _clock;
+    var i, car, ped;
+
+    // Deteksi tembakan baru: muzzleUntil berubah nilai -> catat waktu lokal.
+    if (S.combat && typeof S.combat.muzzleUntil === 'number') {
+      if (S.combat.muzzleUntil !== _seenMuzzle) {
+        _seenMuzzle = S.combat.muzzleUntil;
+        _shotAtLocal = now;
+      }
+    }
+    var shooting = (now - _shotAtLocal) < 1.5;
+    var player = S.player || null;
+    var playerSpeeding = false;
+    if (player && !player.onFoot && Math.abs(player.speed || 0) > 8) {
+      playerSpeeding = true;
+    }
+
+    // --- Mobil traffic: lurus sepanjang sumbu road, wrap di ujung. ---
+    var cars = S.cars || [];
+    for (i = 0; i < cars.length; i++) {
+      car = cars[i];
+      if (!car || !car.pos) { continue; }
+      if (car.road === 'x') {
+        car.pos.x += Math.sin(car.heading) * car.speed * dt;
+        if (car.pos.x > WRAP) { car.pos.x = -WRAP; }
+        if (car.pos.x < -WRAP) { car.pos.x = WRAP; }
+      } else {
+        car.pos.z += Math.cos(car.heading) * car.speed * dt;
+        if (car.pos.z > WRAP) { car.pos.z = -WRAP; }
+        if (car.pos.z < -WRAP) { car.pos.z = WRAP; }
+      }
+      car.mesh.rotation.y = car.heading;
+      if (H.Vehicles && H.Vehicles.tickCarVisual) {
+        H.Vehicles.tickCarVisual(car, dt);
+      }
+    }
+
+    // --- Pejalan kaki: jalan di trotoar, belok di ujung blok, lari bila
+    // ada tembakan baru atau mobil pemain ngebut di dekat mereka. ---
+    var peds = S.peds || [];
+    for (i = 0; i < peds.length; i++) {
+      ped = peds[i];
+      if (!ped || !ped.pos) { continue; }
+      var flee = false;
+      if (shooting) { flee = true; }
+      if (player && playerSpeeding) {
+        var pd = dist2D(ped.pos.x, ped.pos.z, player.pos.x, player.pos.z);
+        if (pd < 6) { flee = true; }
+      }
+      if (flee && ped.state !== 'flee') {
+        ped.state = 'flee';
+        ped.fleeT = 2.5;
+        // Hadap menjauhi pemain (atau menjauhi pusat tembakan = pemain).
+        if (player) {
+          ped.heading = Math.atan2(ped.pos.x - player.pos.x, ped.pos.z - player.pos.z);
+        }
+      }
+      if (ped.state === 'flee') {
+        ped.fleeT -= dt;
+        ped.pos.x += Math.sin(ped.heading) * 5.5 * dt;
+        ped.pos.z += Math.cos(ped.heading) * 5.5 * dt;
+        ped.phase += dt * 9;
+        if (ped.fleeT <= 0) { ped.state = 'walk'; }
+      } else {
+        ped.pos.x += Math.sin(ped.heading) * ped.speed * dt;
+        ped.pos.z += Math.cos(ped.heading) * ped.speed * dt;
+        ped.phase += dt * 4 * ped.speed;
+        // Belok di ujung blok / batas kota.
+        if (ped.pos.x > 196 || ped.pos.x < -196 || ped.pos.z > 196 || ped.pos.z < -196) {
+          ped.heading += Math.PI / 2;
+          ped.pos.x = clamp(ped.pos.x, -196, 196);
+          ped.pos.z = clamp(ped.pos.z, -196, 196);
+        }
+      }
+      ped.mesh.rotation.y = ped.heading;
+      // Ayun kaki/lengan sederhana.
+      var limbs = ped.mesh.userData && ped.mesh.userData.limbs;
+      if (limbs) {
+        var swing = Math.sin(ped.phase) * (ped.state === 'flee' ? 0.7 : 0.4);
+        limbs.legL.rotation.x = swing;
+        limbs.legR.rotation.x = -swing;
+        limbs.armL.rotation.x = -swing * 0.8;
+        limbs.armR.rotation.x = swing * 0.8;
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // stageDensity(S, anchor, carCount, pedCount): pindahkan mobil traffic
+  // + ped TERDEKAT ke sekitar anchor (radius 40 m), perlambat mereka.
+  // ------------------------------------------------------------------
+  function stageDensity(S, anchor, carCount, pedCount) {
+    var a = anchorXZ(anchor);
+    var rng = rngOf(S);
+    var i, j, tmp;
+    var cars = S.cars || [];
+    var peds = S.peds || [];
+    // Urutkan mobil berdasarkan jarak ke anchor (selection sederhana).
+    var order = [];
+    for (i = 0; i < cars.length; i++) {
+      order.push({ idx: i, d: dist2D(cars[i].pos.x, cars[i].pos.z, a.x, a.z) });
+    }
+    for (i = 0; i < order.length; i++) {
+      for (j = i + 1; j < order.length; j++) {
+        if (order[j].d < order[i].d) { tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+      }
+    }
+    var placed = 0;
+    var want = Math.min(carCount || 0, order.length);
+    for (i = 0; i < want; i++) {
+      var car = cars[order[i].idx];
+      // Jalan terdekat dari anchor, posisi acak dalam radius 40 m.
+      var axis = rng() < 0.5 ? 'x' : 'z';
+      var line = nearestLine(axis === 'x' ? a.z : a.x);
+      var along = clamp((axis === 'x' ? a.x : a.z) + (rng() - 0.5) * 70, -190, 190);
+      var lane = (rng() < 0.5 ? -1 : 1) * 4;
+      var heading = axis === 'x'
+        ? (rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2)
+        : (rng() < 0.5 ? 0 : Math.PI);
+      if (axis === 'x') {
+        car.pos.set(along, 0, line + lane);
+      } else {
+        car.pos.set(line + lane, 0, along);
+      }
+      car.road = axis;
+      car.heading = heading;
+      car.mesh.rotation.y = heading;
+      car.speed = 4 + rng() * 2; // pelan, tetap di frame
+      placed++;
+    }
+    // Pejalan kaki terdekat ke trotoar sekitar anchor.
+    var porder = [];
+    for (i = 0; i < peds.length; i++) {
+      porder.push({ idx: i, d: dist2D(peds[i].pos.x, peds[i].pos.z, a.x, a.z) });
+    }
+    for (i = 0; i < porder.length; i++) {
+      for (j = i + 1; j < porder.length; j++) {
+        if (porder[j].d < porder[i].d) { tmp = porder[i]; porder[i] = porder[j]; porder[j] = tmp; }
+      }
+    }
+    var pwant = Math.min(pedCount || 0, porder.length);
+    for (i = 0; i < pwant; i++) {
+      var ped = peds[porder[i].idx];
+      var paxis = rng() < 0.5 ? 'x' : 'z';
+      var pline = nearestLine(paxis === 'x' ? a.z : a.x);
+      var side = rng() < 0.5 ? -1 : 1;
+      var poff = 10 + rng() * 2;
+      var palong = clamp((paxis === 'x' ? a.x : a.z) + (rng() - 0.5) * 70, -190, 190);
+      if (paxis === 'x') {
+        ped.pos.set(palong, 0, pline + side * poff);
+        ped.heading = rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+      } else {
+        ped.pos.set(pline + side * poff, 0, palong);
+        ped.heading = rng() < 0.5 ? 0 : Math.PI;
+      }
+      ped.mesh.rotation.y = ped.heading;
+      ped.state = 'walk';
+      ped.speed = 1 + rng() * 1;
+    }
+    return placed;
+  }
+
+  // ------------------------------------------------------------------
+  // packFrame(S, anchor): 6-8 mobil dalam busur longgar di depan anchor
+  // + pejalan kaki di trotoar sekitarnya. Kembalikan jumlah mobil.
+  // ------------------------------------------------------------------
+  function packFrame(S, anchor) {
+    var a = anchorXZ(anchor);
+    var rng = rngOf(S);
+    var i;
+    if (!S.cars) { S.cars = []; }
+    if (!S.peds) { S.peds = []; }
+    // Arah "depan": dari heading anchor bila ada, kalau tidak menghadap
+    // pusat kota, kalau anchor di pusat pakai +z.
+    var dirX = 0, dirZ = 1;
+    var hd = anchorHeading(anchor);
+    if (hd !== null) {
+      dirX = Math.sin(hd);
+      dirZ = Math.cos(hd);
+    } else {
+      var cx = -a.x, cz = -a.z;
+      var cl = Math.sqrt(cx * cx + cz * cz);
+      if (cl > 1) { dirX = cx / cl; dirZ = cz / cl; }
+    }
+    var want = 6 + Math.floor(rng() * 3); // 6..8
+    // Pakai mobil traffic yang sudah ada dulu (yang terjauh dari anchor
+    // dipindah ke frame); bila kurang, bangun mobil baru.
+    var order = [];
+    for (i = 0; i < S.cars.length; i++) {
+      order.push({ idx: i, d: dist2D(S.cars[i].pos.x, S.cars[i].pos.z, a.x, a.z) });
+    }
+    for (i = 0; i < order.length; i++) {
+      for (var j = i + 1; j < order.length; j++) {
+        if (order[j].d > order[i].d) { var tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+      }
+    }
+    var placed = 0;
+    for (i = 0; i < want; i++) {
+      // Sudut busur -60..+60 derajat dari arah depan, radius 12..30 m.
+      var ang = (-60 + (i * 120) / Math.max(1, want - 1) + (rng() - 0.5) * 10) * Math.PI / 180;
+      var cosA = Math.cos(ang), sinA = Math.sin(ang);
+      var fx = dirX * cosA - dirZ * sinA;
+      var fz = dirX * sinA + dirZ * cosA;
+      var radius = 12 + (i % 3) * 6 + rng() * 4;
+      var tx = a.x + fx * radius;
+      var tz = a.z + fz * radius;
+      // Jepret ke jalan terdekat supaya mobil tidak berdiri di atas gedung.
+      var useX = Math.abs(tz - nearestLine(tz)) <= Math.abs(tx - nearestLine(tx));
+      var line, lane, axis, heading;
+      if (useX) {
+        line = nearestLine(tz);
+        lane = (rng() < 0.5 ? -1 : 1) * 4;
+        axis = 'x';
+        heading = rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+        tx = clamp(tx, -190, 190);
+        tz = line + lane;
+      } else {
+        line = nearestLine(tx);
+        lane = (rng() < 0.5 ? -1 : 1) * 4;
+        axis = 'z';
+        heading = rng() < 0.5 ? 0 : Math.PI;
+        tx = line + lane;
+        tz = clamp(tz, -190, 190);
+      }
+      var car;
+      if (i < order.length) {
+        car = S.cars[order[i].idx];
+      } else {
+        var key = TRAFFIC_MODELS[Math.floor(rng() * TRAFFIC_MODELS.length)];
+        car = H.Vehicles.buildCar(S, key, tx, tz, heading);
+        if (S.scene) { S.scene.add(car.mesh); }
+        S.cars.push(car);
+      }
+      car.road = axis;
+      car.heading = heading;
+      car.pos.set(tx, 0, tz);
+      car.mesh.rotation.y = heading;
+      car.speed = 3 + rng() * 3;
+      car.parked = false;
+      placed++;
+    }
+    // Pejalan kaki di trotoar sekitar anchor (pakai yang terdekat).
+    var porder = [];
+    for (i = 0; i < S.peds.length; i++) {
+      porder.push({ idx: i, d: dist2D(S.peds[i].pos.x, S.peds[i].pos.z, a.x, a.z) });
+    }
+    for (i = 0; i < porder.length; i++) {
+      for (var k = i + 1; k < porder.length; k++) {
+        if (porder[k].d < porder[i].d) { var t2 = porder[i]; porder[i] = porder[k]; porder[k] = t2; }
+      }
+    }
+    var pwant = Math.min(6, porder.length);
+    for (i = 0; i < pwant; i++) {
+      var ped = S.peds[porder[i].idx];
+      var side = i % 2 === 0 ? -1 : 1;
+      var pline = nearestLine(a.z);
+      ped.pos.set(clamp(a.x + (rng() - 0.5) * 50, -190, 190), 0, pline + side * (10 + rng() * 2));
+      ped.heading = rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
+      ped.mesh.rotation.y = ped.heading;
+      ped.state = 'walk';
+    }
+    return placed;
+  }
+
+  H.Traffic = {
+    spawnTraffic: spawnTraffic,
+    spawnPeds: spawnPeds,
+    spawnParked: spawnParked,
+    tickTraffic: tickTraffic,
+    stageDensity: stageDensity,
+    packFrame: packFrame
+  };
+})();

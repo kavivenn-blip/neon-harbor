@@ -1,42 +1,83 @@
 # Neon Harbor
 
-[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![rank](https://make.fun/badge/gta6-01/kavivenn-blip/neon-harbor/rank.svg)](https://make.fun/bounty/gta6-01)
-[![reward](https://make.fun/badge/gta6-01/kavivenn-blip/neon-harbor/reward.svg)](https://make.fun/bounty/gta6-01)
+[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun)
+[![rank](https://make.fun/badge/gta6-01/rank.svg)](https://make.fun)
+[![reward](https://make.fun/badge/gta6-01/reward.svg)](https://make.fun)
 
-An original open-world crime game for the [make.fun gta6-01 "Make GTA 6" bounty](https://make.fun/bounty/gta6-01).
+An open-world crime game in the spirit of GTA 6, built for the
+[make.fun](https://make.fun) **gta6-01** bounty. It runs in a desktop web
+browser from its own files — no build step, no network requests.
 
-Rook is back in Neon Harbor with $250 and a busted sedan. Marisol Vega, the fixer who runs the docks, has work — if Rook can still drive. Explore a sun-soaked coastal city on foot and by car: steal cars, dodge the Harbor PD, climb the wanted ladder from 1 to 5 stars, run eight story missions, and take the Harbor from Dario Kaine's crew.
-
-## What's in the game
-
-- **A living city at golden hour** — downtown towers, beach, docks, suburbs and a park, generated from a seed so the world is identical every run, with a sunset sun disc over the water, palm trees along the beach road, and a slow day/night cycle.
-- **On foot and by car** — walk, sprint, jump and punch; drive sedans, sports cars, trucks and taxis with real acceleration, steering and handbrake drift. Cars read as cars now: visible wheels with hubcaps, headlights and taillights, sloped windshields, a spoiler on the sports car.
-- **Steal cars** — parked cars and traffic cars (the driver runs off, and the cops notice).
-- **Traffic and pedestrians** — 18 cars follow the road grid, 36 pedestrians walk the sidewalks and flee from gunfire and speeding cars.
-- **Wanted 1–5 stars and police** — patrol cruisers chase and ram, foot cops move in to bust you, a helicopter circles at 4+ stars, and heat decays when you slip out of sight.
-- **Combat** — fists, pistol, SMG, shotgun and grenades with mouse aim, ammo and reloads, enemy goons with simple AI, and a kill feed.
-- **8 story missions** — steal, deliver, taxi fares, shootout, escape, heist and a street race, plus taxi side work and 20 hidden packages.
-- **A dense HUD** — health, armor, cash, wanted stars, rank and respect points, day and time, mission title with stage X/Y, progress bar, objective with distance and a NEXT step, a Harbor PD dispatch panel (named units, roles, distances), five weapon slots with icons and ammo, speedometer, car name and condition, radio station and song, district/street/grip readout, and a circular live minimap with roads, waypoint, packages and police.
-- **Menus and save** — start screen, pause, controls help, volume, and save/load in localStorage with a Continue button.
-- **Sound** — synthesized WebAudio: engines, sirens, gunfire, ambience, UI and a Harbor FM music loop. No audio files.
+You are Rook, a driver new to Neon Harbor. Run eight jobs for fixer
+Marisol Vega, steal and drive five kinds of car, dodge Dario Kaine's crew
+and the harbour police, and climb from GREENHORN to HARBOR KING — all at
+golden hour, 18:12, on the Sunset Strand beach road.
 
 ## Play
 
-Open `game/index.html` in desktop Chrome, or serve the `game/` folder with any static server:
+Open `game/index.html` directly in a desktop browser, or serve the
+repository and open it over HTTP:
 
-```
+```sh
 node serve.ts
+# then open http://localhost:8080/
 ```
 
-Then open http://localhost:8080
+Keyboard and mouse: **WASD** move / drive, **E** enter and exit a car,
+**Shift** run, **mouse** aim, **click** shoot, **1–5** switch weapon,
+**Esc** pause, **M** mute. The start screen explains the rest.
 
-No network requests of any kind: every script, image and sound is a file under `game/` (three.js is vendored as `game/vendor/three.min.js`).
+## What is in the game
 
-## Controls
+- A 5×5-block harbour city: downtown, Sunset Strand beach, Cargo Pier
+  container docks, Harbor Towers, Palm Court and Harbor Green — with
+  traffic, pedestrians, palms and a low sun over the water.
+- A wanted level (1–5 stars) with police cruisers that pursue and ram,
+  roadblocks from 3 stars, and a helicopter with a spotlight from 4.
+- Eight story missions with stages, timers and a NEXT objective, plus
+  taxi fares and twenty parcels to collect around the city.
+- Combat with five weapon slots, a kill feed and tracers; a dense HUD
+  with a named dispatch board, rank and respect bar, circular minimap,
+  radio (Harbor FM 101.3), and portrait dialogue.
+- Saving and loading from the pause menu.
 
-WASD move / drive · Shift sprint · Space jump / handbrake · E enter car, steal, collect · F punch · Click shoot · 1–5 weapons · R reload · H horn · P pause · M mute · Enter start next job
+## Screenshots
+
+Four screenshots of the running game live in `screenshots/` (cover first).
+They are retaken from the game itself with a fixed seed (`shots.json` lists
+each shot and its URL query), so every run reproduces the same frames.
+
+## Hand in
+
+`main.ts` (Node 22, standard library only) copies `game/` and
+`screenshots/` to `/output` and writes `/output/dossier.json`:
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+
+## Source layout
+
+| File | Job |
+| --- | --- |
+| `game/src/config.js` | All tuned numbers: city, cars, weapons, missions, ranks, radio |
+| `game/src/world.js` | The city: streets, buildings, beach, docks, sun and sky |
+| `game/src/vehicles.js` | Car models and the cars the player can steal |
+| `game/src/traffic.js` | Traffic, pedestrians and parked cars |
+| `game/src/player.js` | Rook on foot and behind the wheel |
+| `game/src/police.js` | Pursuit, roadblocks, dispatch and the helicopter |
+| `game/src/missions.js` | The eight jobs, fares and parcels |
+| `game/src/combat.js` | Weapons, shooting, tracers and the kill feed |
+| `game/src/hud.js` | The HUD, minimap and dialogue portraits |
+| `game/src/audio.js` | Synthesised sound and the radio |
+| `game/src/ui.js` | Menus, toasts, saving and loading |
+| `game/src/main.js` | Boot, game loop, camera and screenshot hooks |
+
+Everything in the game — the city, the cars, the characters, the story,
+the music — is original work made for this entry. No assets, names or
+music from any commercial game are used. three.js r147 is vendored under
+`game/vendor/` as the bounty allows.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see `LICENSE`.

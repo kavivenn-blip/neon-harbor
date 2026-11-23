@@ -1,8 +1,8 @@
 # Neon Harbor
 
 [![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun)
-[![rank](https://make.fun/badge/gta6-01/rank.svg)](https://make.fun)
-[![reward](https://make.fun/badge/gta6-01/reward.svg)](https://make.fun)
+[![rank](https://make.fun/badge/gta6-01/kavivenn-blip/neon-harbor/rank.svg)](https://make.fun)
+[![reward](https://make.fun/badge/gta6-01/kavivenn-blip/neon-harbor/reward.svg)](https://make.fun)
 
 An open-world crime game in the spirit of GTA 6, built for the
 [make.fun](https://make.fun) **gta6-01** bounty. It runs in a desktop web
